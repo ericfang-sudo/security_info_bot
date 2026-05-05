@@ -1,0 +1,13 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+data/
+service_account.json
+ioc_*.txt
+.playwright-mcp
