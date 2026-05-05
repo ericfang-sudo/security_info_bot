@@ -1,0 +1,27 @@
+name: TWCERT 情資分析
+on:
+  schedule:
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - run: uv run playwright install chromium --with-deps
+      - name: Run TWCERT fetcher
+        env:
+          TWCERT_ACCOUNT:        ${{ secrets.TWCERT_ACCOUNT }}
+          TWCERT_PASSWORD:       ${{ secrets.TWCERT_PASSWORD }}
+          GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_SHEET_ID:       ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SA_JSON_B64:    ${{ secrets.GOOGLE_SA_JSON_B64 }}
+          GOOGLE_DRIVE_IOC_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_IOC_FOLDER_ID }}
+          MATTERMOST_WEBHOOK:    ${{ secrets.MATTERMOST_WEBHOOK }}
+          MATTERMOST_OPS_WEBHOOK: ${{ secrets.MATTERMOST_OPS_WEBHOOK }}
+          USE_FIXTURE_DATA:      'false'
+        run: uv run python main.py --source twcert
