@@ -7,6 +7,7 @@ import requests
 
 from src.config import TWCERT_ACCOUNT, TWCERT_PASSWORD
 from src.models import IntelItem
+from src.parsers.ioc_xlsx import extract_iocs_from_info_file
 from src.utils.errors import TwcertLoginError, send_ops_alert
 from src.utils.logging import log
 
@@ -24,6 +25,12 @@ _INFO_TYPE_MAP = {
     "102": "102-資安事件",
     "103": "103-資安預警",
     "104": "104-其他",
+}
+
+_IMPACT_MAP = {
+    "IMPACT_LEVEL_1": "1",
+    "IMPACT_LEVEL_2": "2",
+    "IMPACT_LEVEL_3": "3",
 }
 
 
@@ -109,7 +116,7 @@ def _fetch_intel_list(session: requests.Session, since_date: str | None = None) 
             return page_items
 
     items = page_items
-    fetched = len(rest.get("infoList") or [])  # raw count for pagination offset
+    fetched = len(rest.get("infoList") or [])
 
     while fetched < total:
         first = fetched + 1
@@ -169,6 +176,12 @@ def _resolve_info_type(code: str | None) -> str:
     return _INFO_TYPE_MAP.get(code, code)
 
 
+def _resolve_impact_level(code: str | None) -> str:
+    if not code:
+        return ""
+    return _IMPACT_MAP.get(code, code)
+
+
 def _build_raw_content(detail: dict) -> str:
     sections = []
     if detail.get("infoContent"):
@@ -179,30 +192,15 @@ def _build_raw_content(detail: dict) -> str:
         sections.append(f"建議措施：{detail['suggestResponse']}")
     if detail.get("refInfo"):
         sections.append(f"參考資訊：{detail['refInfo']}")
+    impact = _resolve_impact_level(detail.get("impactLevelCd"))
+    if impact:
+        sections.append(f"TWCERT 影響等級：第 {impact} 級")
     return "\n\n".join(sections)
 
 
 def _extract_cve_ids(text: str) -> list[str]:
     cves = re.findall(r"CVE-\d{4}-\d{4,}", text)
     return list(dict.fromkeys(cves))
-
-
-def _collect_ips(detail: dict) -> list[str]:
-    """Collect IP indicators from structured detail fields. Returns deduped list preserving order."""
-    seen: dict[str, None] = {}
-    for key in ("infoIp", "infoSocketAddress"):
-        vals = detail.get(key)
-        if not vals or not isinstance(vals, list):
-            continue
-        for v in vals:
-            if not v:
-                continue
-            for ip in re.findall(
-                r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b",
-                str(v),
-            ):
-                seen.setdefault(ip, None)
-    return list(seen.keys())
 
 
 def fetch_twcert(since_date: str | None = None) -> list[IntelItem]:
@@ -239,6 +237,12 @@ def fetch_twcert(since_date: str | None = None) -> list[IntelItem]:
         info_type_code = detail.get("infoTypeCd") or entry.get("infoTypeCd", "")
         publish_ts = entry.get("publishDate") or detail.get("lastPublishDate") or detail.get("shareDate")
 
+        info_file = detail.get("infoFile") or []
+        ioc_ips, ioc_hashes, ioc_domains = extract_iocs_from_info_file(info_file)
+        attachment_names = [
+            f.get("fileName", "") for f in info_file if f.get("fileName")
+        ]
+
         item = IntelItem(
             intel_id=info_id,
             source="TWCERT",
@@ -248,8 +252,11 @@ def fetch_twcert(since_date: str | None = None) -> list[IntelItem]:
             cve_ids=cve_ids,
             raw_content=raw_content,
             reference_urls=ref_urls,
-            attachment_urls=[],
-            ioc_ips=_collect_ips(detail),
+            attachment_urls=attachment_names,
+            ioc_ips=ioc_ips,
+            ioc_hashes=ioc_hashes,
+            ioc_domains=ioc_domains,
+            impact_level=_resolve_impact_level(detail.get("impactLevelCd")),
         )
         items.append(item)
 

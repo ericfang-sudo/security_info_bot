@@ -31,7 +31,7 @@ def test_sheet_row_from_intel_single_cve():
     assert row.status == "待處理"
 
     row_list = row.to_row_list()
-    assert len(row_list) == 20
+    assert len(row_list) == 21  # A–U
 
 
 def test_sheet_row_multi_cve_suffix():
@@ -80,6 +80,7 @@ def test_sheet_row_with_ioc_link():
     )
 
     assert "https://drive.google.com/file/d/xxx/view" in row.recommendation
+    assert "IoC 清單下載" in row.recommendation
 
 
 def test_dedup_logic():

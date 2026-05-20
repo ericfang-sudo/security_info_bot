@@ -9,7 +9,7 @@ from src.fetchers.cisa_kev import fetch_cisa_kev
 from src.fetchers.storage import list_saved_files, load_items, save_items
 from src.fetchers.twcert import fetch_twcert
 from src.models import IntelItem, SheetRow
-from src.parsers.ioc_xlsx import download_and_parse_ioc_xlsx, write_ioc_txt
+from src.parsers.ioc_xlsx import write_ioc_txt
 from src.sinks.drive import upload_ioc_file
 from src.sinks.mattermost import send_intel_alert
 from src.sinks.sheets import (
@@ -43,13 +43,9 @@ def process_intel_items(
 
     for item in new_items:
         ioc_drive_link = ""
-        ioc_path: "Path | None" = None
-        for att_url in item.attachment_urls:
-            if att_url.lower().endswith((".xlsx", ".xls")):
-                ioc_path = download_and_parse_ioc_xlsx(att_url, item.intel_id)
-                break
-        if ioc_path is None and item.ioc_ips:
-            ioc_path = write_ioc_txt(item.intel_id, item.ioc_ips)
+        ioc_path: "Path | None" = write_ioc_txt(
+            item.intel_id, item.ioc_ips, item.ioc_hashes, item.ioc_domains
+        )
         if ioc_path and not dry_run:
             ioc_drive_link = upload_ioc_file(ioc_path)
 

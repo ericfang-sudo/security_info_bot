@@ -16,6 +16,9 @@ class IntelItem:
     reference_urls: list[str] = field(default_factory=list)
     attachment_urls: list[str] = field(default_factory=list)
     ioc_ips: list[str] = field(default_factory=list)
+    ioc_hashes: list[str] = field(default_factory=list)
+    ioc_domains: list[str] = field(default_factory=list)
+    impact_level: str = ""   # "1" / "2" / ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -57,6 +60,7 @@ class SheetRow:
     handler: str = ""  # R
     notification_time: str = ""  # S
     reference_urls: str = ""  # T
+    impact_level: str = ""  # U
 
     def to_row_list(self) -> list[str]:
         return [
@@ -80,6 +84,7 @@ class SheetRow:
             self.handler,
             self.notification_time,
             self.reference_urls,
+            self.impact_level,
         ]
 
     @staticmethod
@@ -97,7 +102,7 @@ class SheetRow:
 
         recommendation = analysis.recommendation
         if ioc_drive_link:
-            recommendation += f"\n\nIP 封鎖清單下載：{ioc_drive_link}"
+            recommendation += f"\n\nIoC 清單下載：{ioc_drive_link}"
 
         return SheetRow(
             record_date=now,
@@ -114,4 +119,5 @@ class SheetRow:
             affected_assets=", ".join(analysis.affected_assets),
             responsible_unit=analysis.responsible_unit,
             reference_urls="\n".join(intel.reference_urls),
+            impact_level=intel.impact_level,
         )

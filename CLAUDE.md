@@ -8,9 +8,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 uv sync --activate
 
-# Install Playwright browser (required for TWCERT fetcher only)
-uv run playwright install chromium --with-deps
-
 # Run tests
 uv run pytest tests/ -v
 
@@ -41,7 +38,7 @@ Fetcher → Dedup (vs Google Sheet) → Gemini AI analysis → Google Sheet writ
 ```
 
 **Two independent sources**, both producing `IntelItem` objects:
-- `src/fetchers/twcert.py` — Playwright-based scraper that logs in to the TWCERT enterprise portal and extracts structured threat intel. Raises `TwcertLoginError` on auth failure, which triggers an ops alert.
+- `src/fetchers/twcert.py` — REST API client that logs in to the TWCERT enterprise portal and extracts structured threat intel. Parses base64-embedded xlsx attachments in `infoFile` to extract IP/hash/domain IoCs. Raises `TwcertLoginError` on auth failure, which triggers an ops alert.
 - `src/fetchers/cisa_kev.py` — Fetches CISA's Known Exploited Vulnerabilities JSON feed and filters by `--date` (defaults to today UTC).
 
 **Analysis** (`src/analyzer/gemini.py`): Calls Gemini with a structured JSON schema (`ANALYSIS_SCHEMA`) that enforces enum values for `risk_level` and `company_relevance`. Returns an `AnalysisResult`. Retries on 429/5xx with exponential backoff; raises `GeminiQuotaExhausted` after `max_retries`.
@@ -59,7 +56,7 @@ Fetcher → Dedup (vs Google Sheet) → Gemini AI analysis → Google Sheet writ
 
 - `IntelItem` — raw fetched intel; serialisable to/from JSON via `to_dict`/`from_dict` (used by `src/fetchers/storage.py` for `--save-data`/`--load-data`).
 - `AnalysisResult` — Gemini output fields.
-- `SheetRow` — 20-column (A–T) Google Sheet row; built by `SheetRow.from_intel_and_analysis(...)`.
+- `SheetRow` — 21-column (A–U) Google Sheet row; built by `SheetRow.from_intel_and_analysis(...)`. Column U holds `impact_level` (TWCERT severity pre-assessment).
 
 ## Configuration (`src/config.py`)
 

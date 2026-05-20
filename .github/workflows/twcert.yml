@@ -10,7 +10,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv sync
-      - run: uv run playwright install chromium --with-deps
       - name: Run TWCERT fetcher
         env:
           TWCERT_ACCOUNT:        ${{ secrets.TWCERT_ACCOUNT }}
