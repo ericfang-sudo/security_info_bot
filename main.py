@@ -6,9 +6,17 @@ from pathlib import Path
 
 from src.analyzer.gemini import analyze_intel
 from src.fetchers.cisa_kev import fetch_cisa_kev
-from src.fetchers.storage import list_saved_files, load_items, save_items
+from src.fetchers.storage import (
+    list_saved_files,
+    load_analysis,
+    load_items,
+    load_sheet_payload,
+    save_analysis,
+    save_items,
+    save_sheet_payload,
+)
 from src.fetchers.twcert import fetch_twcert
-from src.models import IntelItem, SheetRow
+from src.models import AnalysisResult, IntelItem, SheetRow
 from src.parsers.ioc_xlsx import write_ioc_txt
 from src.sinks.drive import upload_ioc_file
 from src.sinks.mattermost import send_intel_alert
@@ -24,127 +32,212 @@ from src.utils.errors import GeminiQuotaExhausted, TwcertLoginError
 from src.utils.logging import log
 
 
-def process_intel_items(
+def stage_fetch(
+    source: str,
+    since_date: str | None = None,
+    save: bool = False,
+    limit: int | None = None,
+) -> list[IntelItem]:
+    if source == "twcert":
+        items = fetch_twcert(since_date, limit=limit)
+    elif source == "cisa_kev":
+        items = fetch_cisa_kev(since_date)
+        if limit is not None:
+            items = items[:limit]
+            log.info("Limiting to %d items", len(items))
+    else:
+        raise ValueError(f"Unknown source: {source}")
+    if save:
+        save_items(items, source, tag=since_date)
+    return items
+
+
+def stage_analyze(
     items: list[IntelItem],
-    existing_ids: set[str],
-    assets_ctx: str,
-    units_ctx: str,
-    rules_ctx: str,
+    source: str,
+    save: bool = False,
+    tag: str | None = None,
     dry_run: bool = False,
-) -> None:
+    limit: int | None = None,
+) -> list[tuple[IntelItem, AnalysisResult]]:
+    existing_ids = set() if dry_run else get_existing_intel_ids()
     new_items = [item for item in items if item.intel_id not in existing_ids]
     if not new_items:
-        log.info("No new intel items to process (all %d already exist)", len(items))
-        return
+        log.info("No new intel items to analyze (all %d already exist)", len(items))
+        return []
 
-    log.info("Processing %d new items (skipped %d duplicates)", len(new_items), len(items) - len(new_items))
+    if limit is not None:
+        new_items = new_items[:limit]
+        log.info("Limiting analysis to %d items", len(new_items))
 
-    all_rows: list[SheetRow] = []
+    log.info("Analyzing %d new items (skipped %d duplicates)", len(new_items), len(items) - len(new_items))
 
+    assets_ctx = load_assets_context()
+    units_ctx = load_units_context()
+    rules_ctx = load_rules_context()
+
+    pairs: list[tuple[IntelItem, AnalysisResult]] = []
     for item in new_items:
-        ioc_drive_link = ""
-        ioc_path: "Path | None" = write_ioc_txt(
-            item.intel_id, item.ioc_ips, item.ioc_hashes, item.ioc_domains
-        )
-        if ioc_path and not dry_run:
-            ioc_drive_link = upload_ioc_file(ioc_path)
-
         try:
             analysis = analyze_intel(item, assets_ctx, units_ctx, rules_ctx)
         except GeminiQuotaExhausted:
             log.error("Gemini quota exhausted, stopping. Remaining items will be processed next run.")
             break
+        log.info("Analyzed %s: risk=%s, relevance=%s", item.intel_id, analysis.risk_level, analysis.company_relevance)
+        pairs.append((item, analysis))
 
-        log.info(
-            "Analyzed %s: risk=%s, relevance=%s",
-            item.intel_id, analysis.risk_level, analysis.company_relevance,
-        )
+    if save and pairs:
+        save_analysis(pairs, source, tag=tag)
+    return pairs
 
-        cve_list = item.cve_ids if item.cve_ids else [""]
+
+def stage_write_sheet(
+    pairs: list[tuple[IntelItem, AnalysisResult]],
+    source: str,
+    save: bool = False,
+    tag: str | None = None,
+    dry_run: bool = False,
+) -> list[dict]:
+    # Defensive re-dedup handles any Sheet writes since stage_analyze ran.
+    existing_ids = set() if dry_run else get_existing_intel_ids()
+    filtered = [(intel, analysis) for intel, analysis in pairs if intel.intel_id not in existing_ids]
+    if not filtered:
+        log.info("No new items to write to Sheet (all already exist)")
+        return []
+
+    all_rows: list[SheetRow] = []
+    payload: list[dict] = []
+
+    for intel, analysis in filtered:
+        ioc_drive_link = ""
+        if not dry_run:
+            ioc_path: Path | None = write_ioc_txt(intel.intel_id, intel.ioc_ips, intel.ioc_hashes, intel.ioc_domains)
+            if ioc_path:
+                ioc_drive_link = upload_ioc_file(ioc_path)
+
+        cve_list = intel.cve_ids if intel.cve_ids else [""]
         for idx, cve_id in enumerate(cve_list):
             suffix = str(idx + 1) if len(cve_list) > 1 else ""
             row = SheetRow.from_intel_and_analysis(
-                intel=item,
+                intel=intel,
                 analysis=analysis,
                 cve_id=cve_id,
                 intel_id_suffix=suffix,
                 ioc_drive_link=ioc_drive_link,
             )
             all_rows.append(row)
-
-            if not dry_run:
-                notification_time = send_intel_alert(
-                    intel=item,
-                    analysis=analysis,
-                    cve_id=cve_id,
-                    ioc_drive_link=ioc_drive_link,
-                )
-                if notification_time:
-                    row.notification_time = notification_time
+            payload.append({
+                "intel_id": row.intel_id,
+                "cve_id": cve_id,
+                "ioc_drive_link": ioc_drive_link,
+                "intel": intel.to_dict(),
+                "analysis": analysis.to_dict(),
+            })
 
     if dry_run:
         log.info("[DRY RUN] Would write %d rows to Sheet", len(all_rows))
         for row in all_rows:
-            log.info(
-                "  %s | %s | %s | %s",
-                row.intel_id, row.cve_id, row.risk_level, row.title[:50],
-            )
-        return
+            log.info("  %s | %s | %s | %s", row.intel_id, row.cve_id, row.risk_level, row.title[:50])
+    else:
+        count = append_rows(all_rows)
+        log.info("Wrote %d rows to Sheet.", count)
 
-    count = append_rows(all_rows)
-    log.info("Done. Wrote %d rows total.", count)
-
-    for row in all_rows:
-        if row.notification_time:
-            row_id = row.intel_id
-            update_notification_time(row_id, row.notification_time)
+    if save and payload:
+        save_sheet_payload(payload, source, tag=tag)
+    return payload
 
 
-def _fetch_items(
-    source: str,
-    target_date: str | None = None,
-    since_date: str | None = None,
-) -> list[IntelItem]:
-    if source == "twcert":
-        return fetch_twcert(since_date)
-    elif source == "cisa_kev":
-        return fetch_cisa_kev(target_date)
-    raise ValueError(f"Unknown source: {source}")
+def stage_notify(payload: list[dict], dry_run: bool = False) -> None:
+    for entry in payload:
+        intel = IntelItem.from_dict(entry["intel"])
+        analysis = AnalysisResult.from_dict(entry["analysis"])
+        cve_id: str = entry["cve_id"]
+        ioc_drive_link: str = entry.get("ioc_drive_link", "")
+        intel_id: str = entry["intel_id"]
+
+        if dry_run:
+            log.info("[DRY RUN] Would notify: %s (risk=%s)", intel_id, analysis.risk_level)
+            continue
+
+        notification_time = send_intel_alert(
+            intel=intel,
+            analysis=analysis,
+            cve_id=cve_id,
+            ioc_drive_link=ioc_drive_link,
+        )
+        if notification_time:
+            update_notification_time(intel_id, notification_time)
 
 
 def run(
     source: str,
     dry_run: bool = False,
-    target_date: str | None = None,
     since_date: str | None = None,
     save_data: bool = False,
     load_data: str | None = None,
     fetch_only: bool = False,
+    analyze_only: bool = False,
+    write_only: bool = False,
+    load_analysis_path: str | None = None,
+    load_sheet_path: str | None = None,
+    limit: int | None = None,
 ) -> None:
-    log.info("=== %s 情資%s開始 ===", source.upper(), "擷取" if fetch_only else "分析")
+    # --- Stage 4 only ---
+    if load_sheet_path:
+        log.info("=== %s Stage 4: Mattermost notify ===", source.upper())
+        payload = load_sheet_payload(load_sheet_path)
+        stage_notify(payload, dry_run=dry_run)
+        log.info("=== %s 通報完成 ===", source.upper())
+        return
 
+    # --- Stage 3+ ---
+    if load_analysis_path:
+        log.info("=== %s Stage 3+: Write Sheet ===", source.upper())
+        pairs = load_analysis(load_analysis_path)
+        payload = stage_write_sheet(pairs, source, save=True, tag=since_date, dry_run=dry_run)
+        if not write_only and payload:
+            stage_notify(payload, dry_run=dry_run)
+        log.info("=== %s 完成 ===", source.upper())
+        return
+
+    # --- Stage 1: Fetch ---
+    log.info("=== %s 情資%s開始 ===", source.upper(), "擷取" if fetch_only else "分析")
     if load_data:
         items = load_items(load_data)
+        if limit is not None:
+            items = items[:limit]
+            log.info("Limiting to %d items", len(items))
     else:
-        items = _fetch_items(source, target_date, since_date)
+        items = stage_fetch(source, since_date=since_date, save=save_data or fetch_only, limit=limit)
 
     if not items:
         log.info("No items fetched")
         return
 
-    if save_data or fetch_only:
-        save_items(items, source, tag=target_date)
-
     if fetch_only:
-        log.info("Fetch-only mode: saved %d items, skipping analysis", len(items))
+        log.info("Fetch-only mode: %d items saved, skipping analysis", len(items))
         return
 
-    existing_ids = set() if dry_run else get_existing_intel_ids()
-    assets_ctx = load_assets_context()
-    units_ctx = load_units_context()
-    rules_ctx = load_rules_context()
+    # --- Stage 2: Analyze ---
+    pairs = stage_analyze(items, source, save=analyze_only, tag=since_date, dry_run=dry_run, limit=limit)
+    if not pairs:
+        return
 
-    process_intel_items(items, existing_ids, assets_ctx, units_ctx, rules_ctx, dry_run)
+    if analyze_only:
+        log.info("Analyze-only mode: %d pairs saved, skipping Sheet write", len(pairs))
+        return
+
+    # --- Stage 3: Write Sheet ---
+    payload = stage_write_sheet(pairs, source, save=write_only, tag=since_date, dry_run=dry_run)
+
+    if write_only:
+        log.info("Write-only mode: %d rows saved, skipping Mattermost notify", len(payload))
+        return
+
+    # --- Stage 4: Notify ---
+    if payload:
+        stage_notify(payload, dry_run=dry_run)
+
     log.info("=== %s 情資分析完成 ===", source.upper())
 
 
@@ -162,8 +255,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="資安情資 AI 自動化分析系統")
     parser.add_argument(
         "--source",
-        choices=["twcert", "cisa_kev"],
-        help="情資來源：twcert 或 cisa_kev",
+        help="情資來源：twcert 或 cisa_kev（--list-data 時可用任意前綴，如 analysis_twcert）",
     )
     parser.add_argument(
         "--dry-run",
@@ -171,23 +263,37 @@ def main() -> None:
         help="模擬執行，不寫入 Sheet 也不發送通報",
     )
     parser.add_argument(
-        "--date",
-        type=str,
-        default=None,
-        help="指定 CISA KEV 目標日期 (YYYY-MM-DD)，預設為今天",
-    )
-    parser.add_argument(
         "--since",
         type=str,
         default=None,
         metavar="DATE",
-        help="僅擷取 TWCERT 指定日期（含）之後的情資 (YYYY-MM-DD)，預設不限制",
+        help="僅擷取指定日期（含）之後的情資 (YYYY-MM-DD)，預設為今天",
     )
     parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="限制 Stage 1/2 處理的最大項目數量（測試用）",
+    )
+
+    stage_group = parser.add_mutually_exclusive_group()
+    stage_group.add_argument(
         "--fetch-only",
         action="store_true",
         help="僅擷取情資並儲存至本機，不執行 AI 分析與通報",
     )
+    stage_group.add_argument(
+        "--analyze-only",
+        action="store_true",
+        help="執行到 Gemini 分析後停止，將結果儲存為 analysis_*.json",
+    )
+    stage_group.add_argument(
+        "--write-only",
+        action="store_true",
+        help="執行到寫入 Sheet 後停止，將 payload 儲存為 sheet_*.json（不發 Mattermost）",
+    )
+
     parser.add_argument(
         "--save-data",
         action="store_true",
@@ -198,7 +304,21 @@ def main() -> None:
         type=str,
         default=None,
         metavar="FILE",
-        help="從本機 JSON 檔案載入情資，跳過遠端擷取",
+        help="從本機 fetch JSON 載入情資，跳過遠端擷取（從 Stage 2 開始）",
+    )
+    parser.add_argument(
+        "--load-analysis",
+        type=str,
+        default=None,
+        metavar="FILE",
+        help="從本機 analysis JSON 載入分析結果，跳過 Stage 1–2（從 Stage 3 開始）",
+    )
+    parser.add_argument(
+        "--load-sheet",
+        type=str,
+        default=None,
+        metavar="FILE",
+        help="從本機 sheet JSON 載入 payload，跳過 Stage 1–3（僅執行 Stage 4 Mattermost 通報）",
     )
     parser.add_argument(
         "--list-data",
@@ -212,21 +332,24 @@ def main() -> None:
         cmd_list_data(args.source)
         return
 
-    if not args.source and not args.load_data:
-        parser.error("--source is required unless using --load-data")
-
-    if args.load_data and not args.source:
-        parser.error("--source is required with --load-data to select the processing pipeline")
+    if not args.source:
+        parser.error("--source is required")
+    if args.source not in ("twcert", "cisa_kev"):
+        parser.error(f"--source must be 'twcert' or 'cisa_kev' (got '{args.source}')")
 
     try:
         run(
             source=args.source,
             dry_run=args.dry_run,
-            target_date=args.date,
             since_date=args.since,
             save_data=args.save_data,
             load_data=args.load_data,
             fetch_only=args.fetch_only,
+            analyze_only=args.analyze_only,
+            write_only=args.write_only,
+            load_analysis_path=args.load_analysis,
+            load_sheet_path=args.load_sheet,
+            limit=args.limit,
         )
     except TwcertLoginError:
         log.error("TWCERT login failed, ops alert already sent")
