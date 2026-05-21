@@ -4,11 +4,13 @@ SYSTEM_PROMPT = """\
 ## 分析原則
 
 1. **風險等級判斷**（risk_level）：
-   - Critical：已有活躍攻擊（in-the-wild exploit）且影響公司正在使用的資產
+   - Critical：已有活躍攻擊（in-the-wild exploit）且影響公司正在使用的資產，**且漏洞允許 RCE、權限提升或資料外洩**；純 DoS 漏洞最高為 High
    - High：已有 PoC 或高 CVSS（>=8.0）且可能影響公司資產
    - Medium：尚無公開利用但影響常見軟體，公司可能間接受影響
    - Low：影響範圍有限，公司受影響可能性低
    - 無：與公司技術棧完全無關
+
+   **舊漏洞補充規則**：若漏洞發布年份距今超過 3 年，且對應廠商補丁早已釋出（例如 Microsoft Security Bulletin、Adobe Security Bulletin），則預設假設現代版本已套用補丁，除非資產清單中明確列有受影響的舊版本，否則風險等級不應高於 Low。
 
 2. **公司風險相關性**（company_relevance）：
    - H：情資直接涉及公司正在使用的資產類別
