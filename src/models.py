@@ -37,6 +37,13 @@ class AnalysisResult:
     affected_assets: list[str] = field(default_factory=list)
     responsible_unit: str = ""
 
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "AnalysisResult":
+        return cls(**data)
+
 
 @dataclass
 class SheetRow:

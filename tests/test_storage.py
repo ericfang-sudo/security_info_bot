@@ -1,9 +1,18 @@
 import json
-import tempfile
 from pathlib import Path
 
-from src.fetchers.storage import load_items, save_items, list_saved_files
-from src.models import IntelItem
+import pytest
+
+from src.fetchers.storage import (
+    list_saved_files,
+    load_analysis,
+    load_items,
+    load_sheet_payload,
+    save_analysis,
+    save_items,
+    save_sheet_payload,
+)
+from src.models import AnalysisResult, IntelItem
 
 
 def _make_items() -> list[IntelItem]:
@@ -80,7 +89,6 @@ def test_list_saved_files(tmp_path, monkeypatch):
 
 
 def test_load_nonexistent_raises():
-    import pytest
     with pytest.raises(FileNotFoundError):
         load_items("/nonexistent/path.json")
 
@@ -92,3 +100,92 @@ def test_intel_item_roundtrip():
     assert restored.intel_id == item.intel_id
     assert restored.cve_ids == item.cve_ids
     assert restored.reference_urls == item.reference_urls
+
+
+def _make_analysis() -> AnalysisResult:
+    return AnalysisResult(
+        risk_level="High",
+        summary="Test summary",
+        recommendation="Apply patch",
+        company_relevance="H",
+        affected_assets=["server-a", "server-b"],
+        responsible_unit="IT-Sec",
+    )
+
+
+def test_analysis_roundtrip():
+    a = _make_analysis()
+    d = a.to_dict()
+    restored = AnalysisResult.from_dict(d)
+    assert restored.risk_level == a.risk_level
+    assert restored.affected_assets == a.affected_assets
+    assert restored.responsible_unit == a.responsible_unit
+
+
+def test_save_and_load_analysis_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.fetchers.storage.DATA_DIR", tmp_path)
+
+    pairs = [(item, _make_analysis()) for item in _make_items()]
+    path = save_analysis(pairs, "cisa_kev", tag="2024-04-15")
+
+    assert path.exists()
+    assert path.name.startswith("analysis_cisa_kev_2024-04-15_")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["count"] == 2
+    assert data["source"] == "cisa_kev"
+
+    loaded = load_analysis(path)
+    assert len(loaded) == 2
+    intel0, analysis0 = loaded[0]
+    assert intel0.intel_id == "CVE-2024-12345"
+    assert analysis0.risk_level == "High"
+    assert analysis0.affected_assets == ["server-a", "server-b"]
+
+
+def test_save_analysis_without_tag(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.fetchers.storage.DATA_DIR", tmp_path)
+
+    pairs = [(_make_items()[0], _make_analysis())]
+    path = save_analysis(pairs, "twcert")
+
+    assert path.name.startswith("analysis_twcert_")
+    assert path.name.endswith(".json")
+
+
+def test_load_analysis_nonexistent_raises():
+    with pytest.raises(FileNotFoundError):
+        load_analysis("/nonexistent/analysis.json")
+
+
+def test_save_and_load_sheet_payload_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.fetchers.storage.DATA_DIR", tmp_path)
+
+    item = _make_items()[0]
+    analysis = _make_analysis()
+    rows = [
+        {
+            "intel_id": "CVE-2024-12345",
+            "cve_id": "CVE-2024-12345",
+            "ioc_drive_link": "https://drive.google.com/file/d/abc",
+            "intel": item.to_dict(),
+            "analysis": analysis.to_dict(),
+        }
+    ]
+    path = save_sheet_payload(rows, "cisa_kev", tag="2024-04-15")
+
+    assert path.exists()
+    assert path.name.startswith("sheet_cisa_kev_2024-04-15_")
+
+    loaded = load_sheet_payload(path)
+    assert len(loaded) == 1
+    assert loaded[0]["intel_id"] == "CVE-2024-12345"
+    assert loaded[0]["ioc_drive_link"] == "https://drive.google.com/file/d/abc"
+    restored_intel = IntelItem.from_dict(loaded[0]["intel"])
+    assert restored_intel.intel_id == item.intel_id
+    restored_analysis = AnalysisResult.from_dict(loaded[0]["analysis"])
+    assert restored_analysis.risk_level == "High"
+
+
+def test_load_sheet_payload_nonexistent_raises():
+    with pytest.raises(FileNotFoundError):
+        load_sheet_payload("/nonexistent/sheet.json")

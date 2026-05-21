@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from src.models import IntelItem
+from src.models import AnalysisResult, IntelItem
 from src.utils.logging import log
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -53,3 +53,62 @@ def list_saved_files(source: str | None = None) -> list[Path]:
     if source:
         files = [f for f in files if f.name.startswith(source)]
     return files
+
+
+def save_analysis(
+    pairs: list[tuple[IntelItem, AnalysisResult]],
+    source: str,
+    tag: str | None = None,
+) -> Path:
+    _ensure_data_dir()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"analysis_{source}_{tag}_{timestamp}.json" if tag else f"analysis_{source}_{timestamp}.json"
+    path = DATA_DIR / filename
+    data = {
+        "source": source,
+        "analyzed_at": datetime.now().isoformat(),
+        "count": len(pairs),
+        "items": [{"intel": intel.to_dict(), "analysis": analysis.to_dict()} for intel, analysis in pairs],
+    }
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    log.info("Saved %d analysis pairs to %s", len(pairs), path)
+    return path
+
+
+def load_analysis(path: str | Path) -> list[tuple[IntelItem, AnalysisResult]]:
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Analysis file not found: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    pairs = [(IntelItem.from_dict(e["intel"]), AnalysisResult.from_dict(e["analysis"])) for e in data["items"]]
+    log.info("Loaded %d analysis pairs from %s (analyzed at %s)", len(pairs), path, data.get("analyzed_at", "unknown"))
+    return pairs
+
+
+def save_sheet_payload(
+    rows: list[dict],
+    source: str,
+    tag: str | None = None,
+) -> Path:
+    _ensure_data_dir()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"sheet_{source}_{tag}_{timestamp}.json" if tag else f"sheet_{source}_{timestamp}.json"
+    path = DATA_DIR / filename
+    data = {
+        "source": source,
+        "written_at": datetime.now().isoformat(),
+        "count": len(rows),
+        "rows": rows,
+    }
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    log.info("Saved %d sheet payload rows to %s", len(rows), path)
+    return path
+
+
+def load_sheet_payload(path: str | Path) -> list[dict]:
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Sheet payload file not found: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    log.info("Loaded %d sheet payload rows from %s (written at %s)", len(data["rows"]), path, data.get("written_at", "unknown"))
+    return data["rows"]
