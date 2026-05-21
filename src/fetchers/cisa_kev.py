@@ -10,11 +10,11 @@ from src.utils.logging import log
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 
 
-def fetch_cisa_kev(target_date: str | None = None) -> list[IntelItem]:
-    if target_date is None:
-        target_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+def fetch_cisa_kev(since_date: str | None = None) -> list[IntelItem]:
+    if since_date is None:
+        since_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    log.info("Fetching CISA KEV feed, filtering for date: %s", target_date)
+    log.info("Fetching CISA KEV feed, filtering for dateAdded >= %s", since_date)
 
     resp = requests.get(CISA_KEV_URL, timeout=30)
     resp.raise_for_status()
@@ -25,7 +25,7 @@ def fetch_cisa_kev(target_date: str | None = None) -> list[IntelItem]:
 
     for vuln in vulnerabilities:
         date_added = vuln.get("dateAdded", "")
-        if date_added != target_date:
+        if date_added < since_date:
             continue
 
         cve_id = vuln.get("cveID", "")
@@ -68,5 +68,5 @@ def fetch_cisa_kev(target_date: str | None = None) -> list[IntelItem]:
         )
         items.append(item)
 
-    log.info("Found %d new CISA KEV entries for %s", len(items), target_date)
+    log.info("Found %d CISA KEV entries since %s", len(items), since_date)
     return items

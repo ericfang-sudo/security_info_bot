@@ -101,7 +101,11 @@ def _filter_and_check_cutoff(page_items: list[dict], cutoff_ms: float) -> tuple[
     return kept, stop
 
 
-def _fetch_intel_list(session: requests.Session, since_date: str | None = None) -> list[dict]:
+def _fetch_intel_list(
+    session: requests.Session,
+    since_date: str | None = None,
+    limit: int | None = None,
+) -> list[dict]:
     cutoff_ms = _since_to_epoch_ms(since_date) if since_date else None
 
     rest = _fetch_list_page(session, 1, PAGE_SIZE)
@@ -113,12 +117,15 @@ def _fetch_intel_list(session: requests.Session, since_date: str | None = None) 
         page_items, stop = _filter_and_check_cutoff(page_items, cutoff_ms)
         if stop:
             log.info("All remaining items are older than %s, stopping early", since_date)
-            return page_items
+            return page_items[:limit] if limit is not None else page_items
 
     items = page_items
     fetched = len(rest.get("infoList") or [])
 
     while fetched < total:
+        if limit is not None and len(items) >= limit:
+            break
+
         first = fetched + 1
         last = min(fetched + PAGE_SIZE, total)
         rest = _fetch_list_page(session, first, last)
@@ -139,7 +146,7 @@ def _fetch_intel_list(session: requests.Session, since_date: str | None = None) 
             fetched += len(raw_page)
             log.info("Fetched %d / %d items", fetched, total)
 
-    return items
+    return items[:limit] if limit is not None else items
 
 
 def _fetch_detail(session: requests.Session, info_id: str) -> dict:
@@ -203,7 +210,10 @@ def _extract_cve_ids(text: str) -> list[str]:
     return list(dict.fromkeys(cves))
 
 
-def fetch_twcert(since_date: str | None = None) -> list[IntelItem]:
+def fetch_twcert(since_date: str | None = None, limit: int | None = None) -> list[IntelItem]:
+    if since_date is None:
+        since_date = datetime.now(_TW).strftime("%Y-%m-%d")
+
     session = requests.Session()
     session.headers.update({
         "Content-Type": "application/json",
@@ -213,7 +223,7 @@ def fetch_twcert(since_date: str | None = None) -> list[IntelItem]:
 
     try:
         _login(session)
-        list_items = _fetch_intel_list(session, since_date)
+        list_items = _fetch_intel_list(session, since_date, limit=limit)
     except TwcertLoginError:
         raise
     except Exception as e:
