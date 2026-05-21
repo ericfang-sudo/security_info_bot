@@ -30,26 +30,123 @@ uv sync
 # 設定環境變數（複製範本後填入實際值）
 cp .env.example .env
 
-# 以樣板資料模擬執行（不寫入 Sheet、不發通報）
+# 以樣板資料模擬執行（不寫入 Sheet、不發通報，USE_FIXTURE_DATA=true 為預設）
 uv run python main.py --source cisa_kev --dry-run
-
-# 指定日期測試 CISA KEV
-uv run python main.py --source cisa_kev --dry-run --date 2024-04-15
-
-# 僅擷取情資存至本機（不執行 AI 分析與通報，不需 Gemini / Sheet 憑證）
-uv run python main.py --source cisa_kev --fetch-only
-uv run python main.py --source cisa_kev --fetch-only --date 2024-04-15
-uv run python main.py --source twcert --fetch-only
-
-# 列出已儲存的本機資料
-uv run python main.py --list-data
-
-# 從本機資料重跑分析（跳過遠端擷取）
-uv run python main.py --source cisa_kev --load-data data/cisa_kev_2024-04-15_170000.json --dry-run
+uv run python main.py --source twcert --dry-run
 
 # 正式執行（需設定所有環境變數）
 uv run python main.py --source twcert
 uv run python main.py --source cisa_kev
+```
+
+## 指令說明
+
+### 基本選項
+
+| 選項 | 說明 |
+|:---|:---|
+| `--source {twcert,cisa_kev}` | 情資來源（必填） |
+| `--since YYYY-MM-DD` | 僅擷取指定日期（含）之後的情資，**預設為今天** |
+| `--limit N` | 限制最多處理 N 筆（測試用） |
+| `--dry-run` | 模擬執行，不寫入 Sheet、不上傳 Drive、不發 Mattermost |
+| `--list-data [--source 前綴]` | 列出 `src/data/` 下已儲存的中間檔案 |
+
+### 分階段執行
+
+Pipeline 共分四個階段，可各自獨立執行與儲存中間結果：
+
+```
+Stage 1: Fetch  →  Stage 2: Analyze  →  Stage 3: Write Sheet  →  Stage 4: Notify
+         ↓                  ↓                      ↓
+   src/data/{source}_*.json   analysis_{source}_*.json   sheet_{source}_*.json
+```
+
+#### Stage 1：僅擷取情資
+
+```bash
+# 擷取今天的情資並存至本機（不需 Gemini / Sheet 憑證）
+uv run python main.py --source cisa_kev --fetch-only
+uv run python main.py --source twcert --fetch-only
+
+# 指定日期區間
+uv run python main.py --source twcert --fetch-only --since 2026-05-01
+
+# 限制筆數（測試用）
+uv run python main.py --source twcert --fetch-only --limit 3
+```
+
+#### Stage 2：僅分析（從 fetch JSON 開始）
+
+```bash
+# 先列出可用的 fetch 檔案
+uv run python main.py --list-data --source twcert
+
+# 從本機 fetch JSON 執行 Gemini 分析，結果存為 analysis_*.json
+uv run python main.py --source twcert \
+  --load-data src/data/twcert_20260521_090000.json \
+  --analyze-only
+
+# 加 --dry-run 可略過 Sheet 去重讀取（純分析）
+uv run python main.py --source twcert \
+  --load-data src/data/twcert_20260521_090000.json \
+  --analyze-only --dry-run --limit 2
+```
+
+#### Stage 3：僅寫入 Sheet（從 analysis JSON 開始）
+
+```bash
+uv run python main.py --list-data --source analysis_twcert
+
+uv run python main.py --source twcert \
+  --load-analysis src/data/analysis_twcert_20260521_090000.json \
+  --write-only
+
+# 加 --dry-run 可預覽將寫入的列，不實際寫 Sheet / 上傳 Drive
+uv run python main.py --source twcert \
+  --load-analysis src/data/analysis_twcert_20260521_090000.json \
+  --write-only --dry-run
+```
+
+#### Stage 4：僅發送 Mattermost 通報（從 sheet JSON 開始）
+
+```bash
+uv run python main.py --list-data --source sheet_twcert
+
+uv run python main.py --source twcert \
+  --load-sheet src/data/sheet_twcert_20260521_090000.json
+
+# --dry-run 僅印出將通報的項目，不實際發送
+uv run python main.py --source twcert \
+  --load-sheet src/data/sheet_twcert_20260521_090000.json --dry-run
+```
+
+#### 從中途重跑（略過 Stage 1）
+
+```bash
+# 從已存的 fetch JSON 開始跑完整流程（Stage 2 → 4）
+uv run python main.py --source twcert \
+  --load-data src/data/twcert_20260521_090000.json
+
+# 從 analysis JSON 跑 Stage 3 + 4
+uv run python main.py --source twcert \
+  --load-analysis src/data/analysis_twcert_20260521_090000.json
+```
+
+### 中間檔案說明
+
+所有中間檔案存於 `src/data/`，可用 `--list-data` 搭配前綴篩選：
+
+| 前綴 | 對應階段 | 範例 |
+|:---|:---|:---|
+| `twcert_` / `cisa_kev_` | Stage 1 fetch 輸出 | `twcert_20260521_090000.json` |
+| `analysis_twcert_` / `analysis_cisa_kev_` | Stage 2 analyze 輸出 | `analysis_twcert_20260521_090105.json` |
+| `sheet_twcert_` / `sheet_cisa_kev_` | Stage 3 write 輸出 | `sheet_twcert_20260521_090230.json` |
+
+```bash
+uv run python main.py --list-data                        # 列出全部
+uv run python main.py --list-data --source twcert        # 只看 Stage 1 twcert
+uv run python main.py --list-data --source analysis_twcert  # 只看 Stage 2 twcert
+uv run python main.py --list-data --source sheet_cisa_kev   # 只看 Stage 3 cisa_kev
 ```
 
 ## 環境變數

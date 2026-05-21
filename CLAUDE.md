@@ -19,31 +19,44 @@ uv run python main.py --source cisa_kev --dry-run
 uv run python main.py --source twcert --dry-run
 
 # Fetch and save locally without analysis (no Gemini/Sheet credentials needed)
+# Both sources default to today; use --since YYYY-MM-DD to change the start date
 uv run python main.py --source cisa_kev --fetch-only
+uv run python main.py --source twcert --fetch-only --since 2026-05-01
 
-# Reload from a previously saved JSON file
-uv run python main.py --source cisa_kev --load-data data/cisa_kev_2024-04-15_170000.json --dry-run
+# Limit items for quick testing (stops pagination early for TWCERT)
+uv run python main.py --source twcert --fetch-only --limit 3
 
-# List locally saved data files
+# Stage 2: analyze from a saved fetch JSON
+uv run python main.py --source twcert --load-data src/data/twcert_<ts>.json --analyze-only --dry-run
+
+# Stage 3: write Sheet from a saved analysis JSON
+uv run python main.py --source twcert --load-analysis src/data/analysis_twcert_<ts>.json --write-only --dry-run
+
+# Stage 4: send Mattermost from a saved sheet payload JSON
+uv run python main.py --source twcert --load-sheet src/data/sheet_twcert_<ts>.json --dry-run
+
+# List locally saved intermediate files (prefix filters: twcert, analysis_twcert, sheet_twcert, etc.)
 uv run python main.py --list-data
+uv run python main.py --list-data --source analysis_twcert
 ```
 
 ## Architecture
 
-The pipeline runs in this order:
+The pipeline is split into 4 independently runnable stages, each persisting a JSON handoff to `src/data/`:
 
 ```
-Fetcher → Dedup (vs Google Sheet) → Gemini AI analysis → Google Sheet write → Mattermost alert
-                                                        ↘ IoC .txt → Google Drive upload
+Stage 1 Fetch → Stage 2 Analyze → Stage 3 Write Sheet → Stage 4 Notify
+      ↓               ↓                   ↓
+{source}_*.json  analysis_{source}_*.json  sheet_{source}_*.json
 ```
 
-**Two independent sources**, both producing `IntelItem` objects:
-- `src/fetchers/twcert.py` — REST API client that logs in to the TWCERT enterprise portal and extracts structured threat intel. Parses base64-embedded xlsx attachments in `infoFile` to extract IP/hash/domain IoCs. Raises `TwcertLoginError` on auth failure, which triggers an ops alert.
-- `src/fetchers/cisa_kev.py` — Fetches CISA's Known Exploited Vulnerabilities JSON feed and filters by `--date` (defaults to today UTC).
+**Two independent sources**, both producing `IntelItem` objects. Both default to today if `--since` is omitted:
+- `src/fetchers/twcert.py` — REST API client that logs in to the TWCERT enterprise portal and extracts structured threat intel. Parses base64-embedded xlsx attachments in `infoFile` to extract IP/hash/domain IoCs. Raises `TwcertLoginError` on auth failure, which triggers an ops alert. Default: today TW+8.
+- `src/fetchers/cisa_kev.py` — Fetches CISA's Known Exploited Vulnerabilities JSON feed and filters by `dateAdded >= since_date`. Default: today UTC.
 
 **Analysis** (`src/analyzer/gemini.py`): Calls Gemini with a structured JSON schema (`ANALYSIS_SCHEMA`) that enforces enum values for `risk_level` and `company_relevance`. Returns an `AnalysisResult`. Retries on 429/5xx with exponential backoff; raises `GeminiQuotaExhausted` after `max_retries`.
 
-**Multi-CVE fan-out** (`main.py:process_intel_items`): If an `IntelItem` has multiple CVE IDs, it creates one `SheetRow` per CVE with a numeric suffix on the `intel_id` (e.g., `TWCERT-123-1`, `TWCERT-123-2`).
+**Multi-CVE fan-out** (`main.py:stage_write_sheet`): If an `IntelItem` has multiple CVE IDs, it creates one `SheetRow` per CVE with a numeric suffix on the `intel_id` (e.g., `TWCERT-123-1`, `TWCERT-123-2`).
 
 **Sinks** (write-side):
 - `src/sinks/sheets.py` — Google Sheets via `gspread`; reads column B to deduplicate before writing. Also loads asset/unit/rules context from the same spreadsheet.
@@ -54,8 +67,8 @@ Fetcher → Dedup (vs Google Sheet) → Gemini AI analysis → Google Sheet writ
 
 ## Key data models (`src/models.py`)
 
-- `IntelItem` — raw fetched intel; serialisable to/from JSON via `to_dict`/`from_dict` (used by `src/fetchers/storage.py` for `--save-data`/`--load-data`).
-- `AnalysisResult` — Gemini output fields.
+- `IntelItem` — raw fetched intel; serialisable via `to_dict`/`from_dict`. Persisted by Stage 1.
+- `AnalysisResult` — Gemini output fields; serialisable via `to_dict`/`from_dict`. Persisted by Stage 2 (inside `analysis_*.json`).
 - `SheetRow` — 21-column (A–U) Google Sheet row; built by `SheetRow.from_intel_and_analysis(...)`. Column U holds `impact_level` (TWCERT severity pre-assessment).
 
 ## Configuration (`src/config.py`)
