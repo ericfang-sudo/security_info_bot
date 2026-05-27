@@ -9,6 +9,8 @@ from src.config import GIT_ARCHIVE_AUTO_PUSH, GIT_ARCHIVE_BRANCH
 from src.utils.logging import log
 
 _WORKTREE_DIR = Path(os.environ.get("GIT_ARCHIVE_WORKTREE_DIR", "/tmp/security-info-archive"))
+_github_base_url_cache: str | None | bool = False  # False = not yet fetched
+
 _GIT_BOT_ENV = {
     **os.environ,
     "GIT_AUTHOR_NAME": "security-info-bot",
@@ -110,6 +112,40 @@ def commit_files(files: list[Path], message: str, dest_subdir: str = "ioc") -> N
 
     if GIT_ARCHIVE_AUTO_PUSH:
         _push()
+
+
+def _github_base() -> str | None:
+    """Return 'https://github.com/owner/repo' parsed from origin, or None."""
+    global _github_base_url_cache
+    if _github_base_url_cache is not False:
+        return _github_base_url_cache  # type: ignore[return-value]
+    try:
+        raw = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        _github_base_url_cache = None
+        return None
+
+    if raw.startswith("https://github.com/"):
+        _github_base_url_cache = raw.removesuffix(".git")
+    elif raw.startswith("git@github.com:"):
+        path = raw.removeprefix("git@github.com:").removesuffix(".git")
+        _github_base_url_cache = f"https://github.com/{path}"
+    else:
+        _github_base_url_cache = None
+    return _github_base_url_cache
+
+
+def ioc_file_url(filename: str) -> str | None:
+    """Return the GitHub raw URL for a committed IoC file, or None if unavailable."""
+    if not GIT_ARCHIVE_BRANCH:
+        return None
+    base = _github_base()
+    if not base:
+        return None
+    return f"{base}/raw/{GIT_ARCHIVE_BRANCH}/ioc/{filename}"
 
 
 def _push() -> None:

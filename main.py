@@ -17,7 +17,7 @@ from src.fetchers.storage import (
 from src.fetchers.twcert import fetch_twcert
 from src.models import AnalysisResult, IntelItem, SheetRow
 from src.parsers.ioc_xlsx import write_ioc_txt
-from src.sinks.git_archive import commit_files
+from src.sinks.git_archive import commit_files, ioc_file_url
 from src.sinks.sheets import (
     append_rows,
     get_existing_intel_ids,
@@ -113,10 +113,12 @@ def stage_write_sheet(
     all_rows: list[SheetRow] = []
 
     for intel, analysis in filtered:
+        ioc_url = ""
         if not dry_run:
             ioc_path: Path | None = write_ioc_txt(intel.intel_id, intel.ioc_ips, intel.ioc_hashes, intel.ioc_domains)
             if ioc_path:
                 commit_files([ioc_path], f"data({intel.source.lower()}): IoC for {intel.intel_id}")
+                ioc_url = ioc_file_url(ioc_path.name) or ""
 
         cve_list = intel.cve_ids if intel.cve_ids else [""]
         for idx, cve_id in enumerate(cve_list):
@@ -126,6 +128,7 @@ def stage_write_sheet(
                 analysis=analysis,
                 cve_id=cve_id,
                 intel_id_suffix=suffix,
+                ioc_url=ioc_url,
             )
             all_rows.append(row)
 

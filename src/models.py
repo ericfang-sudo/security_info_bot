@@ -100,11 +100,16 @@ class SheetRow:
         analysis: AnalysisResult,
         cve_id: str,
         intel_id_suffix: str = "",
+        ioc_url: str = "",
     ) -> SheetRow:
         now = datetime.now().strftime("%Y-%m-%d")
         row_intel_id = intel.intel_id
         if intel_id_suffix:
             row_intel_id = f"{intel.intel_id}-{intel_id_suffix}"
+
+        recommendation = analysis.recommendation
+        if ioc_url:
+            recommendation += f"\n\nIoC 清單：{ioc_url}"
 
         return SheetRow(
             record_date=now,
@@ -114,7 +119,7 @@ class SheetRow:
             title=intel.title,
             intel_type=intel.intel_type,
             cve_id=cve_id,
-            recommendation=analysis.recommendation,
+            recommendation=recommendation,
             risk_level=analysis.risk_level,
             summary=analysis.summary,
             company_relevance=analysis.company_relevance,
