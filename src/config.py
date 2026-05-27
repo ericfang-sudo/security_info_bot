@@ -1,5 +1,4 @@
 import base64
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -40,9 +39,7 @@ def get_service_account_path() -> str:
 
     if sa_b64:
         sa_data = base64.b64decode(sa_b64)
-        tmp = tempfile.NamedTemporaryFile(
-            mode="wb", suffix=".json", delete=False, prefix="sa_"
-        )
+        tmp = tempfile.NamedTemporaryFile(mode="wb", suffix=".json", delete=False, prefix="sa_")
         tmp.write(sa_data)
         tmp.close()
         return tmp.name

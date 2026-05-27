@@ -27,7 +27,9 @@ def parse_xlsx_iocs(
     seen_domains: dict[str, None] = {}
 
     try:
-        wb = load_workbook(filename=__import__("io").BytesIO(xlsx_bytes), read_only=True, data_only=True)
+        wb = load_workbook(
+            filename=__import__("io").BytesIO(xlsx_bytes), read_only=True, data_only=True
+        )
     except Exception as e:
         log.error("Failed to open xlsx bytes: %s", e)
         return [], [], []
@@ -124,6 +126,10 @@ def write_ioc_txt(
     output_path.write_text("\n\n".join(sections) + "\n", encoding="utf-8")
     log.info(
         "Wrote IoC txt for %s: %d IPs, %d hashes, %d domains → %s",
-        intel_id, len(ips), len(hashes), len(domains), output_path,
+        intel_id,
+        len(ips),
+        len(hashes),
+        len(domains),
+        output_path,
     )
     return output_path

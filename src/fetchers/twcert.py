@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import requests
 
@@ -56,7 +56,10 @@ def _login(session: requests.Session) -> None:
 
 
 def _fetch_list_page(
-    session: requests.Session, first: int, last: int, keyword: str = "",
+    session: requests.Session,
+    first: int,
+    last: int,
+    keyword: str = "",
 ) -> dict:
     resp = session.post(
         LIST_URL,
@@ -215,11 +218,13 @@ def fetch_twcert(since_date: str | None = None, limit: int | None = None) -> lis
         since_date = datetime.now(_TW).strftime("%Y-%m-%d")
 
     session = requests.Session()
-    session.headers.update({
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Referer": "https://twisac.twcert.org.tw/TW-ISAC/",
-    })
+    session.headers.update(
+        {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Referer": "https://twisac.twcert.org.tw/TW-ISAC/",
+        }
+    )
 
     try:
         _login(session)
@@ -245,13 +250,13 @@ def fetch_twcert(since_date: str | None = None, limit: int | None = None) -> lis
         ref_urls = _parse_reference_urls(detail.get("refInfo"))
 
         info_type_code = detail.get("infoTypeCd") or entry.get("infoTypeCd", "")
-        publish_ts = entry.get("publishDate") or detail.get("lastPublishDate") or detail.get("shareDate")
+        publish_ts = (
+            entry.get("publishDate") or detail.get("lastPublishDate") or detail.get("shareDate")
+        )
 
         info_file = detail.get("infoFile") or []
         ioc_ips, ioc_hashes, ioc_domains = extract_iocs_from_info_file(info_file)
-        attachment_names = [
-            f.get("fileName", "") for f in info_file if f.get("fileName")
-        ]
+        attachment_names = [f.get("fileName", "") for f in info_file if f.get("fileName")]
 
         item = IntelItem(
             intel_id=info_id,

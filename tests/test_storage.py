@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pytest
 
@@ -153,5 +152,3 @@ def test_save_analysis_without_tag(tmp_path, monkeypatch):
 def test_load_analysis_nonexistent_raises():
     with pytest.raises(FileNotFoundError):
         load_analysis("/nonexistent/analysis.json")
-
-

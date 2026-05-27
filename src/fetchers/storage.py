@@ -42,7 +42,12 @@ def load_items(path: str | Path) -> list[IntelItem]:
 
     data = json.loads(path.read_text(encoding="utf-8"))
     items = [IntelItem.from_dict(d) for d in data["items"]]
-    log.info("Loaded %d items from %s (fetched at %s)", len(items), path, data.get("fetched_at", "unknown"))
+    log.info(
+        "Loaded %d items from %s (fetched at %s)",
+        len(items),
+        path,
+        data.get("fetched_at", "unknown"),
+    )
     return items
 
 
@@ -62,13 +67,19 @@ def save_analysis(
 ) -> Path:
     _ensure_data_dir()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"analysis_{source}_{tag}_{timestamp}.json" if tag else f"analysis_{source}_{timestamp}.json"
+    filename = (
+        f"analysis_{source}_{tag}_{timestamp}.json"
+        if tag
+        else f"analysis_{source}_{timestamp}.json"
+    )
     path = DATA_DIR / filename
     data = {
         "source": source,
         "analyzed_at": datetime.now().isoformat(),
         "count": len(pairs),
-        "items": [{"intel": intel.to_dict(), "analysis": analysis.to_dict()} for intel, analysis in pairs],
+        "items": [
+            {"intel": intel.to_dict(), "analysis": analysis.to_dict()} for intel, analysis in pairs
+        ],
     }
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     log.info("Saved %d analysis pairs to %s", len(pairs), path)
@@ -80,8 +91,14 @@ def load_analysis(path: str | Path) -> list[tuple[IntelItem, AnalysisResult]]:
     if not path.exists():
         raise FileNotFoundError(f"Analysis file not found: {path}")
     data = json.loads(path.read_text(encoding="utf-8"))
-    pairs = [(IntelItem.from_dict(e["intel"]), AnalysisResult.from_dict(e["analysis"])) for e in data["items"]]
-    log.info("Loaded %d analysis pairs from %s (analyzed at %s)", len(pairs), path, data.get("analyzed_at", "unknown"))
+    pairs = [
+        (IntelItem.from_dict(e["intel"]), AnalysisResult.from_dict(e["analysis"]))
+        for e in data["items"]
+    ]
+    log.info(
+        "Loaded %d analysis pairs from %s (analyzed at %s)",
+        len(pairs),
+        path,
+        data.get("analyzed_at", "unknown"),
+    )
     return pairs
-
-

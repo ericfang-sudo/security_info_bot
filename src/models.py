@@ -18,7 +18,7 @@ class IntelItem:
     ioc_ips: list[str] = field(default_factory=list)
     ioc_hashes: list[str] = field(default_factory=list)
     ioc_domains: list[str] = field(default_factory=list)
-    impact_level: str = ""   # "1" / "2" / ""
+    impact_level: str = ""  # "1" / "2" / ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -41,7 +41,7 @@ class AnalysisResult:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "AnalysisResult":
+    def from_dict(cls, data: dict) -> AnalysisResult:
         return cls(**data)
 
 

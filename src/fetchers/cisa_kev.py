@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
 
@@ -12,7 +12,7 @@ CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_v
 
 def fetch_cisa_kev(since_date: str | None = None) -> list[IntelItem]:
     if since_date is None:
-        since_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        since_date = datetime.now(UTC).strftime("%Y-%m-%d")
 
     log.info("Fetching CISA KEV feed, filtering for dateAdded >= %s", since_date)
 

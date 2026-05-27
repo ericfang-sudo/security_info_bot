@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import datetime, timezone, timedelta
-from typing import Iterable
+from collections.abc import Iterable
+from datetime import datetime, timedelta, timezone
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -23,9 +23,27 @@ from src.utils.logging import log
 _TW = timezone(timedelta(hours=8))
 
 INTEL_HEADERS = [
-    "紀錄日期", "情資ID", "來源", "發布日期", "標題", "情資類型", "CVE ID",
-    "建議措施", "風險等級", "摘要", "公司相關性", "受影響資產", "負責單位",
-    "狀態", "追蹤連結", "備注", "完成日期", "處理人員", "通知時間", "TWCERT 影響等級", "參考網址",
+    "紀錄日期",
+    "情資ID",
+    "來源",
+    "發布日期",
+    "標題",
+    "情資類型",
+    "CVE ID",
+    "建議措施",
+    "風險等級",
+    "摘要",
+    "公司相關性",
+    "受影響資產",
+    "負責單位",
+    "狀態",
+    "追蹤連結",
+    "備注",
+    "完成日期",
+    "處理人員",
+    "通知時間",
+    "TWCERT 影響等級",
+    "參考網址",
 ]
 
 _gc: gspread.Client | None = None
@@ -37,9 +55,7 @@ _ws_cache: dict[str, gspread.Worksheet] = {}
 def _ensure_client() -> gspread.Client:
     global _gc
     if _gc is None:
-        creds = Credentials.from_service_account_file(
-            get_service_account_path(), scopes=SCOPES
-        )
+        creds = Credentials.from_service_account_file(get_service_account_path(), scopes=SCOPES)
         _gc = gspread.authorize(creds)
     return _gc
 
@@ -68,24 +84,24 @@ def _resolve_date_tab(publish_date: str) -> str:
 _COL_WIDTHS = [
     100,  # A 紀錄日期
     160,  # B 情資ID
-    80,   # C 來源
+    80,  # C 來源
     100,  # D 發布日期
     280,  # E 標題
     100,  # F 情資類型
     130,  # G CVE ID
     280,  # H 建議措施
-    80,   # I 風險等級
+    80,  # I 風險等級
     280,  # J 摘要
-    80,   # K 公司相關性
+    80,  # K 公司相關性
     180,  # L 受影響資產
-    80,   # M 負責單位
-    80,   # N 狀態
+    80,  # M 負責單位
+    80,  # N 狀態
     140,  # O 追蹤連結
     180,  # P 備注
     100,  # Q 完成日期
-    80,   # R 處理人員
+    80,  # R 處理人員
     120,  # S 通知時間
-    80,   # T TWCERT 影響等級
+    80,  # T TWCERT 影響等級
     180,  # U 參考網址
 ]
 
@@ -106,7 +122,12 @@ def _format_worksheet(ws: gspread.Worksheet) -> None:
         },
         {
             "repeatCell": {
-                "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1, "endColumnIndex": 21},
+                "range": {
+                    "sheetId": sid,
+                    "startRowIndex": 0,
+                    "endRowIndex": 1,
+                    "endColumnIndex": 21,
+                },
                 "cell": {
                     "userEnteredFormat": {
                         "textFormat": {"bold": True},
@@ -133,7 +154,12 @@ def _format_worksheet(ws: gspread.Worksheet) -> None:
     ] + [
         {
             "updateDimensionProperties": {
-                "range": {"sheetId": sid, "dimension": "COLUMNS", "startIndex": i, "endIndex": i + 1},
+                "range": {
+                    "sheetId": sid,
+                    "dimension": "COLUMNS",
+                    "startIndex": i,
+                    "endIndex": i + 1,
+                },
                 "properties": {"pixelSize": w},
                 "fields": "pixelSize",
             }

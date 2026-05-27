@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from src.fetchers.twcert import _filter_and_check_cutoff, _since_to_epoch_ms
 

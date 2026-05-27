@@ -24,13 +24,24 @@ def _get_client() -> genai.Client:
 
 ANALYSIS_SCHEMA = types.Schema(
     type=types.Type.OBJECT,
-    required=["risk_level", "summary", "recommendation", "company_relevance", "affected_assets", "responsible_unit"],
+    required=[
+        "risk_level",
+        "summary",
+        "recommendation",
+        "company_relevance",
+        "affected_assets",
+        "responsible_unit",
+    ],
     properties={
-        "risk_level": types.Schema(type=types.Type.STRING, enum=["Critical", "High", "Medium", "Low", "無"]),
+        "risk_level": types.Schema(
+            type=types.Type.STRING, enum=["Critical", "High", "Medium", "Low", "無"]
+        ),
         "summary": types.Schema(type=types.Type.STRING),
         "recommendation": types.Schema(type=types.Type.STRING),
         "company_relevance": types.Schema(type=types.Type.STRING, enum=["H", "M", "L", "無"]),
-        "affected_assets": types.Schema(type=types.Type.ARRAY, items=types.Schema(type=types.Type.STRING)),
+        "affected_assets": types.Schema(
+            type=types.Type.ARRAY, items=types.Schema(type=types.Type.STRING)
+        ),
         "responsible_unit": types.Schema(type=types.Type.STRING),
     },
 )
@@ -81,19 +92,27 @@ def analyze_intel(
             error_str = str(e)
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
                 if attempt == max_retries - 1:
-                    send_ops_alert(
-                        "Gemini API 額度耗盡",
-                        f"情資 {intel.intel_id} 分析失敗，已重試 {max_retries} 次。\n錯誤：{error_str}",
-                    )
+                    detail = f"情資 {intel.intel_id} 分析失敗，已重試 {max_retries} 次。\n錯誤：{error_str}"  # noqa: E501
+                    send_ops_alert("Gemini API 額度耗盡", detail)
                     raise GeminiQuotaExhausted(error_str) from e
                 wait = 2 ** (attempt + 1)
-                log.warning("Gemini rate limited, retrying in %ds (attempt %d/%d)", wait, attempt + 1, max_retries)
+                log.warning(
+                    "Gemini rate limited, retrying in %ds (attempt %d/%d)",
+                    wait,
+                    attempt + 1,
+                    max_retries,
+                )
                 time.sleep(wait)
             elif "500" in error_str or "503" in error_str:
                 if attempt == max_retries - 1:
                     raise
                 wait = 2 ** (attempt + 1)
-                log.warning("Gemini server error, retrying in %ds (attempt %d/%d)", wait, attempt + 1, max_retries)
+                log.warning(
+                    "Gemini server error, retrying in %ds (attempt %d/%d)",
+                    wait,
+                    attempt + 1,
+                    max_retries,
+                )
                 time.sleep(wait)
             else:
                 raise

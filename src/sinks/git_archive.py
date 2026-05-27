@@ -23,7 +23,9 @@ _GIT_BOT_ENV = {
 def _repo_root() -> Path:
     out = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
     return Path(out)
 
@@ -31,7 +33,9 @@ def _repo_root() -> Path:
 def _worktree_linked(wt: Path) -> bool:
     out = subprocess.run(
         ["git", "worktree", "list", "--porcelain"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
     return str(wt) in out
 
@@ -39,7 +43,8 @@ def _worktree_linked(wt: Path) -> bool:
 def _branch_exists(branch: str, cwd: Path) -> bool:
     r = subprocess.run(
         ["git", "show-ref", "--quiet", f"refs/heads/{branch}"],
-        capture_output=True, cwd=cwd,
+        capture_output=True,
+        cwd=cwd,
     )
     return r.returncode == 0
 
@@ -55,20 +60,32 @@ def _ensure_worktree() -> Path:
         shutil.rmtree(wt)
 
     if not _branch_exists(GIT_ARCHIVE_BRANCH, repo):
-        empty_tree = subprocess.run(
-            ["git", "hash-object", "-t", "tree", "--stdin"],
-            input=b"", capture_output=True, check=True, cwd=repo,
-        ).stdout.decode().strip()
+        empty_tree = (
+            subprocess.run(
+                ["git", "hash-object", "-t", "tree", "--stdin"],
+                input=b"",
+                capture_output=True,
+                check=True,
+                cwd=repo,
+            )
+            .stdout.decode()
+            .strip()
+        )
         commit = subprocess.run(
             ["git", "commit-tree", empty_tree, "-m", f"init: {GIT_ARCHIVE_BRANCH} archive branch"],
-            capture_output=True, text=True, check=True, cwd=repo, env=_GIT_BOT_ENV,
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=repo,
+            env=_GIT_BOT_ENV,
         ).stdout.strip()
         subprocess.run(["git", "branch", GIT_ARCHIVE_BRANCH, commit], cwd=repo, check=True)
         log.info("git_archive: created branch '%s'", GIT_ARCHIVE_BRANCH)
 
     subprocess.run(
         ["git", "worktree", "add", str(wt), GIT_ARCHIVE_BRANCH],
-        cwd=repo, check=True,
+        cwd=repo,
+        check=True,
     )
     log.info("git_archive: worktree ready at %s", wt)
     return wt
@@ -110,7 +127,10 @@ def commit_files(
 
     subprocess.run(["git", "add", "-A"], cwd=wt, check=True)
     status = subprocess.run(
-        ["git", "status", "--porcelain"], capture_output=True, text=True, cwd=wt,
+        ["git", "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        cwd=wt,
     ).stdout.strip()
     if not status:
         return
@@ -130,7 +150,9 @@ def _github_base() -> str | None:
     try:
         raw = subprocess.run(
             ["git", "remote", "get-url", "origin"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
     except subprocess.CalledProcessError:
         _github_base_url_cache = None

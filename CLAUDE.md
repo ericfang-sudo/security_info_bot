@@ -38,6 +38,12 @@ uv run python main.py --source cisa_kev --dry-run --no-save-data
 # List locally saved intermediate files (prefix filters: twcert, analysis_twcert, etc.)
 uv run python main.py --list-data
 uv run python main.py --list-data --source analysis_twcert
+
+# Lint + format (ruff)
+uv run ruff check .
+uv run ruff check --fix .
+uv run ruff format .
+uv run ruff format --check .
 ```
 
 ## Documentation Index

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from src.analyzer.gemini import analyze_intel
@@ -65,8 +65,11 @@ def stage_fetch(
         raise ValueError(f"Unknown source: {source}")
     if save:
         path = save_items(items, source, tag=since_date)
-        commit_files([path], f"data({source}): fetch {since_date or 'latest'}, {len(items)} items",
-                     archive_dir=_archive_dir(source, since_date))
+        commit_files(
+            [path],
+            f"data({source}): fetch {since_date or 'latest'}, {len(items)} items",
+            archive_dir=_archive_dir(source, since_date),
+        )
     return items
 
 
@@ -88,7 +91,11 @@ def stage_analyze(
         new_items = new_items[:limit]
         log.info("Limiting analysis to %d items", len(new_items))
 
-    log.info("Analyzing %d new items (skipped %d duplicates)", len(new_items), len(items) - len(new_items))
+    log.info(
+        "Analyzing %d new items (skipped %d duplicates)",
+        len(new_items),
+        len(items) - len(new_items),
+    )
 
     assets_ctx = load_assets_context()
 
@@ -97,15 +104,25 @@ def stage_analyze(
         try:
             analysis = analyze_intel(item, assets_ctx)
         except GeminiQuotaExhausted:
-            log.error("Gemini quota exhausted, stopping. Remaining items will be processed next run.")
+            log.error(
+                "Gemini quota exhausted, stopping. Remaining items will be processed next run."
+            )
             break
-        log.info("Analyzed %s: risk=%s, relevance=%s", item.intel_id, analysis.risk_level, analysis.company_relevance)
+        log.info(
+            "Analyzed %s: risk=%s, relevance=%s",
+            item.intel_id,
+            analysis.risk_level,
+            analysis.company_relevance,
+        )
         pairs.append((item, analysis))
 
     if save and pairs:
         path = save_analysis(pairs, source, tag=tag)
-        commit_files([path], f"data({source}): analysis {tag or 'latest'}, {len(pairs)} pairs",
-                     archive_dir=_archive_dir(source, tag))
+        commit_files(
+            [path],
+            f"data({source}): analysis {tag or 'latest'}, {len(pairs)} pairs",
+            archive_dir=_archive_dir(source, tag),
+        )
     return pairs
 
 
@@ -115,7 +132,9 @@ def stage_write_sheet(
 ) -> int:
     intel_items = [intel for intel, _ in pairs]
     existing_ids = set() if dry_run else get_existing_intel_ids(_item_months(intel_items))
-    filtered = [(intel, analysis) for intel, analysis in pairs if intel.intel_id not in existing_ids]
+    filtered = [
+        (intel, analysis) for intel, analysis in pairs if intel.intel_id not in existing_ids
+    ]
     if not filtered:
         log.info("No new items to write to Sheet (all already exist)")
         return 0
@@ -125,12 +144,16 @@ def stage_write_sheet(
     for intel, analysis in filtered:
         ioc_url = ""
         if not dry_run:
-            ioc_path: Path | None = write_ioc_txt(intel.intel_id, intel.ioc_ips, intel.ioc_hashes, intel.ioc_domains)
+            ioc_path: Path | None = write_ioc_txt(
+                intel.intel_id, intel.ioc_ips, intel.ioc_hashes, intel.ioc_domains
+            )
             if ioc_path:
                 src_lower = intel.source.lower()
                 month = (intel.publish_date or "")[:7] or datetime.now(_TW).strftime("%Y-%m")
                 adir = f"{src_lower}/{month}"
-                commit_files([ioc_path], f"data({src_lower}): IoC for {intel.intel_id}", archive_dir=adir)
+                commit_files(
+                    [ioc_path], f"data({src_lower}): IoC for {intel.intel_id}", archive_dir=adir
+                )
                 ioc_url = ioc_file_url(ioc_path.name, adir) or ""
 
         cve_list = intel.cve_ids if intel.cve_ids else [""]
@@ -148,7 +171,9 @@ def stage_write_sheet(
     if dry_run:
         log.info("[DRY RUN] Would write %d rows to Sheet", len(all_rows))
         for row in all_rows:
-            log.info("  %s | %s | %s | %s", row.intel_id, row.cve_id, row.risk_level, row.title[:50])
+            log.info(
+                "  %s | %s | %s | %s", row.intel_id, row.cve_id, row.risk_level, row.title[:50]
+            )
     else:
         count = append_rows(all_rows)
         log.info("Wrote %d rows to Sheet.", count)
@@ -183,7 +208,9 @@ def run(
             items = items[:limit]
             log.info("Limiting to %d items", len(items))
     else:
-        items = stage_fetch(source, since_date=since_date, save=save_data or fetch_only, limit=limit)
+        items = stage_fetch(
+            source, since_date=since_date, save=save_data or fetch_only, limit=limit
+        )
 
     if not items:
         log.info("No items fetched")
@@ -194,7 +221,9 @@ def run(
         return
 
     # --- Stage 2: Analyze ---
-    pairs = stage_analyze(items, source, save=save_data, tag=since_date, dry_run=dry_run, limit=limit)
+    pairs = stage_analyze(
+        items, source, save=save_data, tag=since_date, dry_run=dry_run, limit=limit
+    )
     if not pairs:
         return
 

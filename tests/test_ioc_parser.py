@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import base64
 import io
-import tempfile
-from pathlib import Path
 
-import pytest
 from openpyxl import Workbook
 
 from src.parsers.ioc_xlsx import (
@@ -15,8 +12,8 @@ from src.parsers.ioc_xlsx import (
     write_ioc_txt,
 )
 
-
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _make_xlsx_bytes(sheets: dict[str, list[list]]) -> bytes:
     """Build an xlsx in memory from {sheet_name: [[row], ...]}."""
@@ -41,6 +38,7 @@ def _make_data_uri(xlsx_bytes: bytes) -> str:
 
 # ── IP_PATTERN ────────────────────────────────────────────────────────────────
 
+
 def test_ip_pattern_valid():
     assert IP_PATTERN.findall("192.168.1.1") == ["192.168.1.1"]
     assert IP_PATTERN.findall("10.0.0.1 and 172.16.0.1") == ["10.0.0.1", "172.16.0.1"]
@@ -52,6 +50,7 @@ def test_ip_pattern_invalid():
 
 
 # ── parse_xlsx_iocs ───────────────────────────────────────────────────────────
+
 
 def test_parse_xlsx_extracts_ips():
     xlsx = _make_xlsx_bytes({"Sheet1": [["IP"], ["1.2.3.4"], ["5.6.7.8"]]})
@@ -98,13 +97,15 @@ def test_parse_xlsx_mixed_twcert_ioc_format():
 
 def test_parse_xlsx_skips_mitre_sheet():
     """MITRE ATT&CK sheet TTP IDs must not be misidentified as hashes."""
-    xlsx = _make_xlsx_bytes({
-        "TWCERT_IoC": [["IP"], ["1.2.3.4"]],
-        "MITRE ATT&CK": [["ID"], ["T1059"], ["TA0011"]],
-    })
+    xlsx = _make_xlsx_bytes(
+        {
+            "TWCERT_IoC": [["IP"], ["1.2.3.4"]],
+            "MITRE ATT&CK": [["ID"], ["T1059"], ["TA0011"]],
+        }
+    )
     ips, hashes, domains = parse_xlsx_iocs(xlsx)
     assert "1.2.3.4" in ips
-    assert hashes == []   # TTP IDs must not be captured as hashes
+    assert hashes == []  # TTP IDs must not be captured as hashes
 
 
 def test_parse_xlsx_dedupes():
@@ -139,6 +140,7 @@ def test_parse_xlsx_bad_bytes_returns_empty():
 
 # ── extract_iocs_from_info_file ───────────────────────────────────────────────
 
+
 def test_extract_iocs_from_info_file_basic():
     xlsx = _make_xlsx_bytes({"Sheet1": [["IP"], ["1.2.3.4"]]})
     info_file = [{"fileName": "test.xlsx", "file": _make_data_uri(xlsx)}]
@@ -148,7 +150,10 @@ def test_extract_iocs_from_info_file_basic():
 
 def test_extract_iocs_skips_non_xlsx():
     info_file = [
-        {"fileName": "readme.txt", "file": "data:text/plain;base64," + base64.b64encode(b"1.2.3.4").decode()},
+        {
+            "fileName": "readme.txt",
+            "file": "data:text/plain;base64," + base64.b64encode(b"1.2.3.4").decode(),
+        },
     ]
     ips, hashes, domains = extract_iocs_from_info_file(info_file)
     assert ips == []
@@ -170,6 +175,7 @@ def test_extract_iocs_merges_multiple_attachments():
 
 
 # ── write_ioc_txt ─────────────────────────────────────────────────────────────
+
 
 def test_write_ioc_txt_all_sections():
     path = write_ioc_txt("TEST-001", ["10.0.0.1", "10.0.0.2"], ["abc123" * 5 + "ab"], ["evil.com"])
@@ -197,7 +203,7 @@ def test_write_ioc_txt_dedupes_and_sorts():
     path = write_ioc_txt("TEST-003", ["10.0.0.2", "10.0.0.1", "10.0.0.2"], [], [])
     assert path is not None
     lines = path.read_text().splitlines()
-    ip_lines = [l for l in lines if l and not l.startswith("[")]
+    ip_lines = [line for line in lines if line and not line.startswith("[")]
     assert ip_lines == sorted(set(["10.0.0.1", "10.0.0.2"]))
     path.unlink(missing_ok=True)
 

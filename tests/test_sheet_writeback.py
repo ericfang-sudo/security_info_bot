@@ -1,6 +1,4 @@
-from unittest.mock import patch, MagicMock
-
-from src.models import IntelItem, AnalysisResult, SheetRow
+from src.models import AnalysisResult, IntelItem, SheetRow
 
 
 def test_sheet_row_from_intel_single_cve():
@@ -83,9 +81,15 @@ def test_sheet_row_ioc():
 def test_dedup_logic():
     existing = {"TWISAC-202404-0001", "CVE-2024-12345"}
     items = [
-        IntelItem(intel_id="TWISAC-202404-0001", source="TWCERT", publish_date="", title="", intel_type=""),
-        IntelItem(intel_id="TWISAC-202404-0099", source="TWCERT", publish_date="", title="", intel_type=""),
-        IntelItem(intel_id="CVE-2024-12345", source="CISA_KEV", publish_date="", title="", intel_type=""),
+        IntelItem(
+            intel_id="TWISAC-202404-0001", source="TWCERT", publish_date="", title="", intel_type=""
+        ),
+        IntelItem(
+            intel_id="TWISAC-202404-0099", source="TWCERT", publish_date="", title="", intel_type=""
+        ),
+        IntelItem(
+            intel_id="CVE-2024-12345", source="CISA_KEV", publish_date="", title="", intel_type=""
+        ),
     ]
 
     new_items = [item for item in items if item.intel_id not in existing]
