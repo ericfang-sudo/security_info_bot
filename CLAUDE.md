@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Automated threat-intel pipeline: fetches TWCERT and CISA KEV daily, runs Gemini AI analysis, writes results to Google Sheets, and archives all artefacts to a dedicated git branch. For specifics, follow the documentation index below.
 
 ## Commands
 
@@ -11,10 +11,7 @@ uv sync --activate
 # Run tests
 uv run pytest tests/ -v
 
-# Run a single test file
-uv run pytest tests/test_cisa_kev_fetcher.py -v
-
-# Dry-run without writing to Sheet
+# Dry-run without writing to Sheet or committing archive
 uv run python main.py --source cisa_kev --dry-run
 uv run python main.py --source twcert --dry-run
 
@@ -23,7 +20,7 @@ uv run python main.py --source twcert --dry-run
 uv run python main.py --source cisa_kev --fetch-only
 uv run python main.py --source twcert --fetch-only --since 2026-05-01
 
-# Limit items for quick testing (stops pagination early for TWCERT)
+# Limit items for quick testing
 uv run python main.py --source twcert --fetch-only --limit 3
 
 # Stage 1+2: fetch + analyze, save both JSONs automatically (default)
@@ -35,7 +32,7 @@ uv run python main.py --source twcert --load-data src/data/twcert_<ts>.json --an
 # Stage 3: write Sheet from a saved analysis JSON
 uv run python main.py --source twcert --load-analysis src/data/analysis_twcert_<ts>.json --dry-run
 
-# Disable auto-save (e.g. quick test)
+# Disable auto-save of intermediate files
 uv run python main.py --source cisa_kev --dry-run --no-save-data
 
 # List locally saved intermediate files (prefix filters: twcert, analysis_twcert, etc.)
@@ -43,42 +40,12 @@ uv run python main.py --list-data
 uv run python main.py --list-data --source analysis_twcert
 ```
 
-## Architecture
+## Documentation Index
 
-The pipeline runs 3 stages:
-
-```
-Stage 1 Fetch → Stage 2 Analyze → Stage 3 Write Sheet
-      ↓               ↓
-{source}_*.json  analysis_{source}_*.json
-```
-
-Intel rows are written to a per-month worksheet (tab named `YYYY-MM` matching each item's `publish_date`). Tabs are auto-created on first use; dedup is scoped per month tab.
-
-**Two independent sources**, both producing `IntelItem` objects. Both default to today if `--since` is omitted:
-- `src/fetchers/twcert.py` — REST API client that logs in to the TWCERT enterprise portal and extracts structured threat intel. Parses base64-embedded xlsx attachments in `infoFile` to extract IP/hash/domain IoCs. Raises `TwcertLoginError` on auth failure, which triggers an ops alert. Default: today TW+8.
-- `src/fetchers/cisa_kev.py` — Fetches CISA's Known Exploited Vulnerabilities JSON feed and filters by `dateAdded >= since_date`. Default: today UTC.
-
-**Analysis** (`src/analyzer/gemini.py`): Calls Gemini with a structured JSON schema (`ANALYSIS_SCHEMA`) that enforces enum values for `risk_level` and `company_relevance`. Returns an `AnalysisResult`. Retries on 429/5xx with exponential backoff; raises `GeminiQuotaExhausted` after `max_retries`.
-
-**Multi-CVE fan-out** (`main.py:stage_write_sheet`): If an `IntelItem` has multiple CVE IDs, it creates one `SheetRow` per CVE with a numeric suffix on the `intel_id` (e.g., `TWCERT-123-1`, `TWCERT-123-2`).
-
-**Sinks** (write-side):
-- `src/sinks/sheets.py` — Google Sheets via `gspread`; per-month worksheet auto-creation and dedup. Loads asset context from the external sheet (`ASSETS_SHEET_ID`). 單位清單 and 風險規章 are no longer used.
-- `src/sinks/git_archive.py` — Commits fetch JSON, analysis JSON, and IoC `.txt` files to a dedicated git branch (`GIT_ARCHIVE_BRANCH`, e.g. `data`) using a git worktree. Files are stored under `{source}/{YYYY-MM}/`. After commit, derives a GitHub raw URL for the IoC file and backfills it into the Sheet recommendation column (H). Pushes to origin when `GIT_ARCHIVE_AUTO_PUSH=true` (set by CI).
-
-**Fixture mode**: `USE_FIXTURE_DATA=true` (default) makes all Sheet reads load from `tests/fixtures/` instead of Google Sheets, so development works without credentials.
-
-## Key data models (`src/models.py`)
-
-- `IntelItem` — raw fetched intel; serialisable via `to_dict`/`from_dict`. Persisted by Stage 1.
-- `AnalysisResult` — Gemini output fields; serialisable via `to_dict`/`from_dict`. Persisted by Stage 2 (inside `analysis_*.json`).
-- `SheetRow` — 21-column (A–U) Google Sheet row; built by `SheetRow.from_intel_and_analysis(...)`. Column T holds `impact_level` (TWCERT 影響等級); column U holds `reference_urls`. Pass `ioc_url` to append a GitHub raw link to the recommendation column (H).
-
-## Configuration (`src/config.py`)
-
-All settings are env vars loaded via `python-dotenv`. The Google Service Account credential is provided either as a file path (`GOOGLE_SA_JSON_FILE`) or as a base64-encoded JSON string (`GOOGLE_SA_JSON_B64`), which the config module writes to a temp file at runtime.
-
-## CI (`.github/workflows/`)
-
-Both workflows run **daily at 09:00 TW+8 (01:00 UTC)** via `schedule` cron, and also support manual `workflow_dispatch`. Each run passes `--since <today>` (TWCERT uses `TZ=Asia/Taipei`, CISA KEV uses `date -u`). After the pipeline completes, fetch JSON / analysis JSON / IoC txt are pushed to the `data` archive branch (`GIT_ARCHIVE_AUTO_PUSH=true`). Requires `permissions: contents: write` and `fetch-depth: 0` on checkout.
+- [Architecture](docs/architecture.md) — 3-stage pipeline, subsystem map, multi-CVE fan-out, fixture mode, timezone contract
+- [Data Models](docs/data-models.md) — `IntelItem` / `AnalysisResult` / `SheetRow` / Gemini schema / Sheet columns A–U
+- [Configuration](docs/configuration.md) — env var reference, SA credential resolution, fixture mode files
+- [Archive Branch](docs/archive-branch.md) — git worktree mechanics, `{source}/{YYYY-MM}/` layout, IoC URL backfill
+- [Deployment](docs/deployment.md) — CI workflows, daily schedule, GitHub Secrets, permissions, self-hosted runner
+- [Error Handling](docs/error-handling.md) — `TwcertLoginError` / `GeminiQuotaExhausted`, retry/backoff, `send_ops_alert` (log-only)
+- [Original Design Proposal (zh-TW, historical)](docs/spec/資安情資_AI_自動化分析計劃.md)
