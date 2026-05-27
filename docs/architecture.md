@@ -2,6 +2,53 @@
 
 Automated threat-intel pipeline that fetches from two sources daily, runs Gemini analysis, and writes structured rows to Google Sheets. Intermediate artefacts (fetch JSON, analysis JSON, IoC txt) are committed to a dedicated git archive branch.
 
+## Directory structure
+
+```
+├── main.py                          # CLI entry point — stage_fetch / stage_analyze / stage_write_sheet
+├── pyproject.toml
+├── .env.example                     # env var template
+├── .github/workflows/
+│   ├── twcert.yml                   # daily 09:00 TW+8
+│   └── cisa_kev.yml                 # daily 09:00 TW+8
+├── src/
+│   ├── config.py                    # all env vars + SA credential resolution
+│   ├── models.py                    # IntelItem / AnalysisResult / SheetRow
+│   ├── fetchers/
+│   │   ├── twcert.py                # TWCERT REST API client + xlsx IoC parser
+│   │   ├── cisa_kev.py              # CISA KEV JSON feed fetcher
+│   │   └── storage.py               # save_items / load_items / save_analysis / load_analysis
+│   ├── analyzer/
+│   │   ├── gemini.py                # Gemini API call + ANALYSIS_SCHEMA + retry logic
+│   │   └── prompt.py                # SYSTEM_PROMPT + build_analysis_prompt()
+│   ├── sinks/
+│   │   ├── sheets.py                # gspread write + monthly tab auto-create + dedup + asset context
+│   │   └── git_archive.py           # worktree commit + IoC URL derivation
+│   ├── parsers/
+│   │   └── ioc_xlsx.py              # base64 xlsx → (ips, hashes, domains) + write_ioc_txt()
+│   └── utils/
+│       ├── logging.py               # structured log singleton
+│       └── errors.py                # TwcertLoginError / GeminiQuotaExhausted / send_ops_alert
+├── tests/
+│   ├── fixtures/
+│   │   ├── sample_assets.json       # fixture asset inventory (8-column format)
+│   │   ├── sample_cisa_kev.json     # fixture CISA KEV feed
+│   │   └── sample_twcert_iocs.xlsx  # fixture IoC attachment for parser tests
+│   ├── test_cisa_kev_fetcher.py
+│   ├── test_ioc_parser.py
+│   ├── test_sheet_writeback.py
+│   ├── test_storage.py
+│   └── test_twcert_since.py
+└── docs/
+    ├── architecture.md              # ← this file
+    ├── data-models.md
+    ├── configuration.md
+    ├── archive-branch.md
+    ├── deployment.md
+    ├── error-handling.md
+    └── spec/                        # historical zh-TW design proposal
+```
+
 ## Pipeline stages
 
 ```
