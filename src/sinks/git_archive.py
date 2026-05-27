@@ -135,7 +135,9 @@ def commit_files(
     if not status:
         return
 
-    subprocess.run(["git", "commit", "-m", message], cwd=wt, env=_GIT_BOT_ENV, check=True)
+    subprocess.run(
+        ["git", "commit", "--no-verify", "-m", message], cwd=wt, env=_GIT_BOT_ENV, check=True
+    )
     log.info("git_archive: committed %d file(s) to '%s'", len(existing), GIT_ARCHIVE_BRANCH)
 
     if GIT_ARCHIVE_AUTO_PUSH:
