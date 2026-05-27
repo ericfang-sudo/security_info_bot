@@ -6,8 +6,12 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v6
       - run: uv sync
       - name: Run CISA KEV fetcher
@@ -17,5 +21,7 @@ jobs:
           ASSETS_SHEET_ID:       ${{ secrets.ASSETS_SHEET_ID }}
           GOOGLE_SA_JSON_B64:    ${{ secrets.GOOGLE_SA_JSON_B64 }}
           MATTERMOST_OPS_WEBHOOK: ${{ secrets.MATTERMOST_OPS_WEBHOOK }}
+          GIT_ARCHIVE_BRANCH:    ${{ secrets.GIT_ARCHIVE_BRANCH || 'data' }}
+          GIT_ARCHIVE_AUTO_PUSH: 'true'
           USE_FIXTURE_DATA:      'false'
         run: uv run python main.py --source cisa_kev

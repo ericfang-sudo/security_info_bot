@@ -16,9 +16,11 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
 
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "")
-GOOGLE_DRIVE_IOC_FOLDER_ID = os.environ.get("GOOGLE_DRIVE_IOC_FOLDER_ID", "")
 ASSETS_SHEET_ID = os.environ.get("ASSETS_SHEET_ID", "")
 ASSETS_WORKSHEET = os.environ.get("ASSETS_WORKSHEET", "工作表1")
+
+GIT_ARCHIVE_BRANCH = os.environ.get("GIT_ARCHIVE_BRANCH", "")
+GIT_ARCHIVE_AUTO_PUSH = os.environ.get("GIT_ARCHIVE_AUTO_PUSH", "false").lower() == "true"
 
 MATTERMOST_OPS_WEBHOOK = os.environ.get("MATTERMOST_OPS_WEBHOOK", "")
 

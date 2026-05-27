@@ -59,7 +59,7 @@ def test_sheet_row_multi_cve_suffix():
     assert row2.cve_id == "CVE-2024-2222"
 
 
-def test_sheet_row_with_ioc_link():
+def test_sheet_row_ioc():
     intel = IntelItem(
         intel_id="TWISAC-202404-0003",
         source="TWCERT",
@@ -74,13 +74,10 @@ def test_sheet_row_with_ioc_link():
         company_relevance="H",
     )
 
-    row = SheetRow.from_intel_and_analysis(
-        intel, analysis, "",
-        ioc_drive_link="https://drive.google.com/file/d/xxx/view",
-    )
+    row = SheetRow.from_intel_and_analysis(intel, analysis, "")
 
-    assert "https://drive.google.com/file/d/xxx/view" in row.recommendation
-    assert "IoC 清單下載" in row.recommendation
+    assert row.recommendation == "匯入防火牆封鎖"
+    assert row.intel_id == "TWISAC-202404-0003"
 
 
 def test_dedup_logic():

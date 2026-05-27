@@ -16,9 +16,8 @@ from src.fetchers.storage import (
 )
 from src.fetchers.twcert import fetch_twcert
 from src.models import AnalysisResult, IntelItem, SheetRow
-from src.config import GOOGLE_DRIVE_IOC_FOLDER_ID
 from src.parsers.ioc_xlsx import write_ioc_txt
-from src.sinks.drive import upload_ioc_file
+from src.sinks.git_archive import commit_files
 from src.sinks.sheets import (
     append_rows,
     get_existing_intel_ids,
@@ -57,7 +56,8 @@ def stage_fetch(
     else:
         raise ValueError(f"Unknown source: {source}")
     if save:
-        save_items(items, source, tag=since_date)
+        path = save_items(items, source, tag=since_date)
+        commit_files([path], f"data({source}): fetch {since_date or 'latest'}, {len(items)} items")
     return items
 
 
@@ -94,7 +94,8 @@ def stage_analyze(
         pairs.append((item, analysis))
 
     if save and pairs:
-        save_analysis(pairs, source, tag=tag)
+        path = save_analysis(pairs, source, tag=tag)
+        commit_files([path], f"data({source}): analysis {tag or 'latest'}, {len(pairs)} pairs")
     return pairs
 
 
@@ -112,11 +113,10 @@ def stage_write_sheet(
     all_rows: list[SheetRow] = []
 
     for intel, analysis in filtered:
-        ioc_drive_link = ""
-        if not dry_run and GOOGLE_DRIVE_IOC_FOLDER_ID:
+        if not dry_run:
             ioc_path: Path | None = write_ioc_txt(intel.intel_id, intel.ioc_ips, intel.ioc_hashes, intel.ioc_domains)
             if ioc_path:
-                ioc_drive_link = upload_ioc_file(ioc_path)
+                commit_files([ioc_path], f"data({intel.source.lower()}): IoC for {intel.intel_id}")
 
         cve_list = intel.cve_ids if intel.cve_ids else [""]
         for idx, cve_id in enumerate(cve_list):
@@ -126,7 +126,6 @@ def stage_write_sheet(
                 analysis=analysis,
                 cve_id=cve_id,
                 intel_id_suffix=suffix,
-                ioc_drive_link=ioc_drive_link,
             )
             all_rows.append(row)
 
