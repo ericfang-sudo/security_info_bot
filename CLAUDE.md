@@ -65,7 +65,7 @@ Intel rows are written to a per-month worksheet (tab named `YYYY-MM` matching ea
 
 **Sinks** (write-side):
 - `src/sinks/sheets.py` — Google Sheets via `gspread`; per-month worksheet auto-creation and dedup. Loads asset context from the external sheet (`ASSETS_SHEET_ID`). 單位清單 and 風險規章 are no longer used.
-- `src/sinks/drive.py` — Uploads IoC `.txt` files to a configured Google Drive folder (only when `GOOGLE_DRIVE_IOC_FOLDER_ID` is set).
+- `src/sinks/git_archive.py` — Commits fetch JSON, analysis JSON, and IoC `.txt` files to a dedicated git branch (`GIT_ARCHIVE_BRANCH`, e.g. `data`) using a git worktree. Files are stored under `{source}/{YYYY-MM}/`. After commit, derives a GitHub raw URL for the IoC file and backfills it into the Sheet recommendation column (H). Pushes to origin when `GIT_ARCHIVE_AUTO_PUSH=true` (set by CI).
 
 **Fixture mode**: `USE_FIXTURE_DATA=true` (default) makes all Sheet reads load from `tests/fixtures/` instead of Google Sheets, so development works without credentials.
 
@@ -73,7 +73,7 @@ Intel rows are written to a per-month worksheet (tab named `YYYY-MM` matching ea
 
 - `IntelItem` — raw fetched intel; serialisable via `to_dict`/`from_dict`. Persisted by Stage 1.
 - `AnalysisResult` — Gemini output fields; serialisable via `to_dict`/`from_dict`. Persisted by Stage 2 (inside `analysis_*.json`).
-- `SheetRow` — 21-column (A–U) Google Sheet row; built by `SheetRow.from_intel_and_analysis(...)`. Column T holds `impact_level` (TWCERT 影響等級); column U holds `reference_urls`.
+- `SheetRow` — 21-column (A–U) Google Sheet row; built by `SheetRow.from_intel_and_analysis(...)`. Column T holds `impact_level` (TWCERT 影響等級); column U holds `reference_urls`. Pass `ioc_url` to append a GitHub raw link to the recommendation column (H).
 
 ## Configuration (`src/config.py`)
 
@@ -81,4 +81,4 @@ All settings are env vars loaded via `python-dotenv`. The Google Service Account
 
 ## CI (`.github/workflows/`)
 
-Both workflows are currently **manual-dispatch only** (`workflow_dispatch`). The original schedules (TWCERT every 4h, CISA KEV daily at UTC 09:00) are disabled. Set `USE_FIXTURE_DATA: 'false'` in the workflow env to use real credentials from GitHub Secrets.
+Both workflows run **daily at 09:00 TW+8 (01:00 UTC)** via `schedule` cron, and also support manual `workflow_dispatch`. Each run passes `--since <today>` (TWCERT uses `TZ=Asia/Taipei`, CISA KEV uses `date -u`). After the pipeline completes, fetch JSON / analysis JSON / IoC txt are pushed to the `data` archive branch (`GIT_ARCHIVE_AUTO_PUSH=true`). Requires `permissions: contents: write` and `fetch-depth: 0` on checkout.
