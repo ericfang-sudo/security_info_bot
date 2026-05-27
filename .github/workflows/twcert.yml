@@ -28,4 +28,4 @@ jobs:
           GIT_ARCHIVE_BRANCH:    ${{ secrets.GIT_ARCHIVE_BRANCH || 'data' }}
           GIT_ARCHIVE_AUTO_PUSH: 'true'
           USE_FIXTURE_DATA:      'false'
-        run: uv run python main.py --source twcert
+        run: uv run python main.py --source twcert --since $(TZ=Asia/Taipei date +%Y-%m-%d)
