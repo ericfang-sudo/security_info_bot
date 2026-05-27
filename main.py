@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from src.analyzer.gemini import analyze_intel
@@ -10,26 +11,34 @@ from src.fetchers.storage import (
     list_saved_files,
     load_analysis,
     load_items,
-    load_sheet_payload,
     save_analysis,
     save_items,
-    save_sheet_payload,
 )
 from src.fetchers.twcert import fetch_twcert
 from src.models import AnalysisResult, IntelItem, SheetRow
+from src.config import GOOGLE_DRIVE_IOC_FOLDER_ID
 from src.parsers.ioc_xlsx import write_ioc_txt
 from src.sinks.drive import upload_ioc_file
-from src.sinks.mattermost import send_intel_alert
 from src.sinks.sheets import (
     append_rows,
     get_existing_intel_ids,
     load_assets_context,
-    load_rules_context,
-    load_units_context,
-    update_notification_time,
 )
 from src.utils.errors import GeminiQuotaExhausted, TwcertLoginError
 from src.utils.logging import log
+
+_TW = timezone(timedelta(hours=8))
+
+
+def _item_months(items: list[IntelItem]) -> set[str]:
+    months = set()
+    for item in items:
+        d = (item.publish_date or "")[:10].strip()
+        if len(d) >= 7 and d[4] == "-":
+            months.add(d[:7])
+        else:
+            months.add(datetime.now(_TW).strftime("%Y-%m"))
+    return months
 
 
 def stage_fetch(
@@ -60,7 +69,7 @@ def stage_analyze(
     dry_run: bool = False,
     limit: int | None = None,
 ) -> list[tuple[IntelItem, AnalysisResult]]:
-    existing_ids = set() if dry_run else get_existing_intel_ids()
+    existing_ids = set() if dry_run else get_existing_intel_ids(_item_months(items))
     new_items = [item for item in items if item.intel_id not in existing_ids]
     if not new_items:
         log.info("No new intel items to analyze (all %d already exist)", len(items))
@@ -73,13 +82,11 @@ def stage_analyze(
     log.info("Analyzing %d new items (skipped %d duplicates)", len(new_items), len(items) - len(new_items))
 
     assets_ctx = load_assets_context()
-    units_ctx = load_units_context()
-    rules_ctx = load_rules_context()
 
     pairs: list[tuple[IntelItem, AnalysisResult]] = []
     for item in new_items:
         try:
-            analysis = analyze_intel(item, assets_ctx, units_ctx, rules_ctx)
+            analysis = analyze_intel(item, assets_ctx)
         except GeminiQuotaExhausted:
             log.error("Gemini quota exhausted, stopping. Remaining items will be processed next run.")
             break
@@ -93,24 +100,20 @@ def stage_analyze(
 
 def stage_write_sheet(
     pairs: list[tuple[IntelItem, AnalysisResult]],
-    source: str,
-    save: bool = False,
-    tag: str | None = None,
     dry_run: bool = False,
-) -> list[dict]:
-    # Defensive re-dedup handles any Sheet writes since stage_analyze ran.
-    existing_ids = set() if dry_run else get_existing_intel_ids()
+) -> int:
+    intel_items = [intel for intel, _ in pairs]
+    existing_ids = set() if dry_run else get_existing_intel_ids(_item_months(intel_items))
     filtered = [(intel, analysis) for intel, analysis in pairs if intel.intel_id not in existing_ids]
     if not filtered:
         log.info("No new items to write to Sheet (all already exist)")
-        return []
+        return 0
 
     all_rows: list[SheetRow] = []
-    payload: list[dict] = []
 
     for intel, analysis in filtered:
         ioc_drive_link = ""
-        if not dry_run:
+        if not dry_run and GOOGLE_DRIVE_IOC_FOLDER_ID:
             ioc_path: Path | None = write_ioc_txt(intel.intel_id, intel.ioc_ips, intel.ioc_hashes, intel.ioc_domains)
             if ioc_path:
                 ioc_drive_link = upload_ioc_file(ioc_path)
@@ -126,13 +129,6 @@ def stage_write_sheet(
                 ioc_drive_link=ioc_drive_link,
             )
             all_rows.append(row)
-            payload.append({
-                "intel_id": row.intel_id,
-                "cve_id": cve_id,
-                "ioc_drive_link": ioc_drive_link,
-                "intel": intel.to_dict(),
-                "analysis": analysis.to_dict(),
-            })
 
     if dry_run:
         log.info("[DRY RUN] Would write %d rows to Sheet", len(all_rows))
@@ -142,61 +138,25 @@ def stage_write_sheet(
         count = append_rows(all_rows)
         log.info("Wrote %d rows to Sheet.", count)
 
-    if save and payload:
-        save_sheet_payload(payload, source, tag=tag)
-    return payload
-
-
-def stage_notify(payload: list[dict], dry_run: bool = False) -> None:
-    for entry in payload:
-        intel = IntelItem.from_dict(entry["intel"])
-        analysis = AnalysisResult.from_dict(entry["analysis"])
-        cve_id: str = entry["cve_id"]
-        ioc_drive_link: str = entry.get("ioc_drive_link", "")
-        intel_id: str = entry["intel_id"]
-
-        if dry_run:
-            log.info("[DRY RUN] Would notify: %s (risk=%s)", intel_id, analysis.risk_level)
-            continue
-
-        notification_time = send_intel_alert(
-            intel=intel,
-            analysis=analysis,
-            cve_id=cve_id,
-            ioc_drive_link=ioc_drive_link,
-        )
-        if notification_time:
-            update_notification_time(intel_id, notification_time)
+    return len(all_rows)
 
 
 def run(
     source: str,
     dry_run: bool = False,
     since_date: str | None = None,
-    save_data: bool = False,
+    save_data: bool = True,
     load_data: str | None = None,
     fetch_only: bool = False,
     analyze_only: bool = False,
-    write_only: bool = False,
     load_analysis_path: str | None = None,
-    load_sheet_path: str | None = None,
     limit: int | None = None,
 ) -> None:
-    # --- Stage 4 only ---
-    if load_sheet_path:
-        log.info("=== %s Stage 4: Mattermost notify ===", source.upper())
-        payload = load_sheet_payload(load_sheet_path)
-        stage_notify(payload, dry_run=dry_run)
-        log.info("=== %s 通報完成 ===", source.upper())
-        return
-
-    # --- Stage 3+ ---
+    # --- Stage 3+ (from analysis JSON) ---
     if load_analysis_path:
-        log.info("=== %s Stage 3+: Write Sheet ===", source.upper())
+        log.info("=== %s Stage 3: Write Sheet ===", source.upper())
         pairs = load_analysis(load_analysis_path)
-        payload = stage_write_sheet(pairs, source, save=True, tag=since_date, dry_run=dry_run)
-        if not write_only and payload:
-            stage_notify(payload, dry_run=dry_run)
+        stage_write_sheet(pairs, dry_run=dry_run)
         log.info("=== %s 完成 ===", source.upper())
         return
 
@@ -219,7 +179,7 @@ def run(
         return
 
     # --- Stage 2: Analyze ---
-    pairs = stage_analyze(items, source, save=analyze_only, tag=since_date, dry_run=dry_run, limit=limit)
+    pairs = stage_analyze(items, source, save=save_data, tag=since_date, dry_run=dry_run, limit=limit)
     if not pairs:
         return
 
@@ -228,16 +188,7 @@ def run(
         return
 
     # --- Stage 3: Write Sheet ---
-    payload = stage_write_sheet(pairs, source, save=write_only, tag=since_date, dry_run=dry_run)
-
-    if write_only:
-        log.info("Write-only mode: %d rows saved, skipping Mattermost notify", len(payload))
-        return
-
-    # --- Stage 4: Notify ---
-    if payload:
-        stage_notify(payload, dry_run=dry_run)
-
+    stage_write_sheet(pairs, dry_run=dry_run)
     log.info("=== %s 情資分析完成 ===", source.upper())
 
 
@@ -260,7 +211,7 @@ def main() -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="模擬執行，不寫入 Sheet 也不發送通報",
+        help="模擬執行，不寫入 Sheet 也不上傳 Drive",
     )
     parser.add_argument(
         "--since",
@@ -281,23 +232,18 @@ def main() -> None:
     stage_group.add_argument(
         "--fetch-only",
         action="store_true",
-        help="僅擷取情資並儲存至本機，不執行 AI 分析與通報",
+        help="僅擷取情資並儲存至本機，不執行 AI 分析",
     )
     stage_group.add_argument(
         "--analyze-only",
         action="store_true",
         help="執行到 Gemini 分析後停止，將結果儲存為 analysis_*.json",
     )
-    stage_group.add_argument(
-        "--write-only",
-        action="store_true",
-        help="執行到寫入 Sheet 後停止，將 payload 儲存為 sheet_*.json（不發 Mattermost）",
-    )
-
     parser.add_argument(
-        "--save-data",
-        action="store_true",
-        help="將擷取的情資儲存至本機 data/ 目錄（JSON 格式）",
+        "--no-save-data",
+        action="store_false",
+        dest="save_data",
+        help="不儲存中間檔案至本機 data/ 目錄（預設會儲存）",
     )
     parser.add_argument(
         "--load-data",
@@ -312,13 +258,6 @@ def main() -> None:
         default=None,
         metavar="FILE",
         help="從本機 analysis JSON 載入分析結果，跳過 Stage 1–2（從 Stage 3 開始）",
-    )
-    parser.add_argument(
-        "--load-sheet",
-        type=str,
-        default=None,
-        metavar="FILE",
-        help="從本機 sheet JSON 載入 payload，跳過 Stage 1–3（僅執行 Stage 4 Mattermost 通報）",
     )
     parser.add_argument(
         "--list-data",
@@ -346,9 +285,7 @@ def main() -> None:
             load_data=args.load_data,
             fetch_only=args.fetch_only,
             analyze_only=args.analyze_only,
-            write_only=args.write_only,
             load_analysis_path=args.load_analysis,
-            load_sheet_path=args.load_sheet,
             limit=args.limit,
         )
     except TwcertLoginError:

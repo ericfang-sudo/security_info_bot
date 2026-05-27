@@ -7,10 +7,8 @@ from src.fetchers.storage import (
     list_saved_files,
     load_analysis,
     load_items,
-    load_sheet_payload,
     save_analysis,
     save_items,
-    save_sheet_payload,
 )
 from src.models import AnalysisResult, IntelItem
 
@@ -157,35 +155,3 @@ def test_load_analysis_nonexistent_raises():
         load_analysis("/nonexistent/analysis.json")
 
 
-def test_save_and_load_sheet_payload_roundtrip(tmp_path, monkeypatch):
-    monkeypatch.setattr("src.fetchers.storage.DATA_DIR", tmp_path)
-
-    item = _make_items()[0]
-    analysis = _make_analysis()
-    rows = [
-        {
-            "intel_id": "CVE-2024-12345",
-            "cve_id": "CVE-2024-12345",
-            "ioc_drive_link": "https://drive.google.com/file/d/abc",
-            "intel": item.to_dict(),
-            "analysis": analysis.to_dict(),
-        }
-    ]
-    path = save_sheet_payload(rows, "cisa_kev", tag="2024-04-15")
-
-    assert path.exists()
-    assert path.name.startswith("sheet_cisa_kev_2024-04-15_")
-
-    loaded = load_sheet_payload(path)
-    assert len(loaded) == 1
-    assert loaded[0]["intel_id"] == "CVE-2024-12345"
-    assert loaded[0]["ioc_drive_link"] == "https://drive.google.com/file/d/abc"
-    restored_intel = IntelItem.from_dict(loaded[0]["intel"])
-    assert restored_intel.intel_id == item.intel_id
-    restored_analysis = AnalysisResult.from_dict(loaded[0]["analysis"])
-    assert restored_analysis.risk_level == "High"
-
-
-def test_load_sheet_payload_nonexistent_raises():
-    with pytest.raises(FileNotFoundError):
-        load_sheet_payload("/nonexistent/sheet.json")
