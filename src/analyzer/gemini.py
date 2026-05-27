@@ -39,8 +39,6 @@ ANALYSIS_SCHEMA = types.Schema(
 def analyze_intel(
     intel: IntelItem,
     assets_context: str,
-    units_context: str,
-    rules_context: str,
     max_retries: int = 3,
 ) -> AnalysisResult:
     client = _get_client()
@@ -53,7 +51,7 @@ def analyze_intel(
     if intel.reference_urls:
         intel_text += f"\n參考連結：{', '.join(intel.reference_urls)}\n"
 
-    user_prompt = build_analysis_prompt(intel_text, assets_context, units_context, rules_context)
+    user_prompt = build_analysis_prompt(intel_text, assets_context)
 
     for attempt in range(max_retries):
         try:

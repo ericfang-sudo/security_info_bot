@@ -1,117 +1,215 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
+from typing import Iterable
 
 import gspread
 from google.oauth2.service_account import Credentials
 
 from src.config import (
+    ASSETS_SHEET_ID,
+    ASSETS_WORKSHEET,
     FIXTURE_DIR,
     GOOGLE_SHEET_ID,
     SCOPES,
-    SHEET_ASSETS_WORKSHEET,
-    SHEET_INTEL_WORKSHEET,
-    SHEET_RULES_WORKSHEET,
-    SHEET_UNITS_WORKSHEET,
     USE_FIXTURE_DATA,
     get_service_account_path,
 )
 from src.models import SheetRow
 from src.utils.logging import log
 
+_TW = timezone(timedelta(hours=8))
+
+INTEL_HEADERS = [
+    "紀錄日期", "情資ID", "來源", "發布日期", "標題", "情資類型", "CVE ID",
+    "建議措施", "風險等級", "摘要", "公司相關性", "受影響資產", "負責單位",
+    "狀態", "追蹤連結", "備注", "完成日期", "處理人員", "通知時間", "TWCERT 影響等級", "參考網址",
+]
+
 _gc: gspread.Client | None = None
 _spreadsheet: gspread.Spreadsheet | None = None
+_assets_spreadsheet: gspread.Spreadsheet | None = None
+_ws_cache: dict[str, gspread.Worksheet] = {}
 
 
-def _get_spreadsheet() -> gspread.Spreadsheet:
-    global _gc, _spreadsheet
-    if _spreadsheet is None:
+def _ensure_client() -> gspread.Client:
+    global _gc
+    if _gc is None:
         creds = Credentials.from_service_account_file(
             get_service_account_path(), scopes=SCOPES
         )
         _gc = gspread.authorize(creds)
-        _spreadsheet = _gc.open_by_key(GOOGLE_SHEET_ID)
+    return _gc
+
+
+def _get_spreadsheet() -> gspread.Spreadsheet:
+    global _spreadsheet
+    if _spreadsheet is None:
+        _spreadsheet = _ensure_client().open_by_key(GOOGLE_SHEET_ID)
     return _spreadsheet
 
 
-def get_existing_intel_ids() -> set[str]:
+def _get_assets_spreadsheet() -> gspread.Spreadsheet:
+    global _assets_spreadsheet
+    if _assets_spreadsheet is None:
+        _assets_spreadsheet = _ensure_client().open_by_key(ASSETS_SHEET_ID)
+    return _assets_spreadsheet
+
+
+def _resolve_date_tab(publish_date: str) -> str:
+    date_part = (publish_date or "")[:10].strip()
+    if len(date_part) >= 7 and date_part[4] == "-":
+        return date_part[:7]  # YYYY-MM
+    return datetime.now(_TW).strftime("%Y-%m")
+
+
+_COL_WIDTHS = [
+    100,  # A 紀錄日期
+    160,  # B 情資ID
+    80,   # C 來源
+    100,  # D 發布日期
+    280,  # E 標題
+    100,  # F 情資類型
+    130,  # G CVE ID
+    280,  # H 建議措施
+    80,   # I 風險等級
+    280,  # J 摘要
+    80,   # K 公司相關性
+    180,  # L 受影響資產
+    80,   # M 負責單位
+    80,   # N 狀態
+    140,  # O 追蹤連結
+    180,  # P 備注
+    100,  # Q 完成日期
+    80,   # R 處理人員
+    120,  # S 通知時間
+    80,   # T TWCERT 影響等級
+    180,  # U 參考網址
+]
+
+
+def _format_worksheet(ws: gspread.Worksheet) -> None:
+    sid = ws._properties["sheetId"]
+    requests = [
+        {
+            "updateSheetProperties": {
+                "properties": {"sheetId": sid, "gridProperties": {"frozenRowCount": 1}},
+                "fields": "gridProperties.frozenRowCount",
+            }
+        },
+        {
+            "setBasicFilter": {
+                "filter": {"range": {"sheetId": sid, "startRowIndex": 0, "endColumnIndex": 21}}
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1, "endColumnIndex": 21},
+                "cell": {
+                    "userEnteredFormat": {
+                        "textFormat": {"bold": True},
+                        "backgroundColor": {"red": 0.82, "green": 0.88, "blue": 0.95},
+                    }
+                },
+                "fields": "userEnteredFormat(textFormat,backgroundColor)",
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {"sheetId": sid, "endColumnIndex": 21},
+                "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}},
+                "fields": "userEnteredFormat(wrapStrategy,verticalAlignment)",
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {"sheetId": sid, "startColumnIndex": 20, "endColumnIndex": 21},
+                "cell": {"userEnteredFormat": {"wrapStrategy": "CLIP"}},
+                "fields": "userEnteredFormat.wrapStrategy",
+            }
+        },
+    ] + [
+        {
+            "updateDimensionProperties": {
+                "range": {"sheetId": sid, "dimension": "COLUMNS", "startIndex": i, "endIndex": i + 1},
+                "properties": {"pixelSize": w},
+                "fields": "pixelSize",
+            }
+        }
+        for i, w in enumerate(_COL_WIDTHS)
+    ]
+    ws.spreadsheet.batch_update({"requests": requests})
+
+
+def _get_or_create_date_worksheet(date_str: str) -> gspread.Worksheet:
+    if date_str in _ws_cache:
+        return _ws_cache[date_str]
     ss = _get_spreadsheet()
-    ws = ss.worksheet(SHEET_INTEL_WORKSHEET)
-    col_b = ws.col_values(2)  # B column = intel_id
-    return set(col_b[1:])  # skip header
+    try:
+        ws = ss.worksheet(date_str)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = ss.add_worksheet(title=date_str, rows=1000, cols=21)
+        ws.append_row(INTEL_HEADERS, value_input_option="USER_ENTERED")
+        _format_worksheet(ws)
+        log.info("Created new worksheet: %s", date_str)
+    _ws_cache[date_str] = ws
+    return ws
+
+
+def get_existing_intel_ids(dates: Iterable[str]) -> set[str]:
+    ss = _get_spreadsheet()
+    all_ids: set[str] = set()
+    for date_str in dates:
+        try:
+            ws = ss.worksheet(date_str)
+        except gspread.exceptions.WorksheetNotFound:
+            continue
+        col_b = ws.col_values(2)
+        all_ids.update(col_b[1:])  # skip header
+    return all_ids
 
 
 def append_rows(rows: list[SheetRow]) -> int:
     if not rows:
         return 0
 
-    ss = _get_spreadsheet()
-    ws = ss.worksheet(SHEET_INTEL_WORKSHEET)
+    by_date: dict[str, list[SheetRow]] = defaultdict(list)
+    for row in rows:
+        by_date[_resolve_date_tab(row.publish_date)].append(row)
 
-    values = [row.to_row_list() for row in rows]
-    ws.append_rows(values, value_input_option="USER_ENTERED")
-    log.info("Appended %d rows to Sheet", len(values))
-    return len(values)
+    total = 0
+    for date_str, date_rows in sorted(by_date.items()):
+        ws = _get_or_create_date_worksheet(date_str)
+        values = [r.to_row_list() for r in date_rows]
+        ws.append_rows(values, value_input_option="USER_ENTERED")
+        log.info("Appended %d rows to worksheet %s", len(values), date_str)
+        total += len(values)
 
-
-def update_notification_time(intel_id: str, notification_time: str) -> None:
-    ss = _get_spreadsheet()
-    ws = ss.worksheet(SHEET_INTEL_WORKSHEET)
-
-    col_b = ws.col_values(2)
-    for i, val in enumerate(col_b):
-        if val == intel_id:
-            ws.update_cell(i + 1, 19, notification_time)  # S column = 19
-            break
+    return total
 
 
 def load_assets_context() -> str:
     if USE_FIXTURE_DATA:
         path = FIXTURE_DIR / "sample_assets.json"
         with open(path, encoding="utf-8") as f:
-            assets = json.load(f)
-        lines = []
-        for a in assets:
-            lines.append(f"- {a['category']}：{', '.join(a['items'])}（負責：{a['owner']}）")
-        return "\n".join(lines)
+            records = json.load(f)
+    else:
+        ws = _get_assets_spreadsheet().worksheet(ASSETS_WORKSHEET)
+        records = ws.get_all_records()
 
-    ss = _get_spreadsheet()
-    ws = ss.worksheet(SHEET_ASSETS_WORKSHEET)
-    records = ws.get_all_records()
     lines = []
     for r in records:
-        lines.append(f"- {r.get('category', '')}：{r.get('items', '')}（負責：{r.get('owner', '')}）")
-    return "\n".join(lines)
-
-
-def load_units_context() -> str:
-    if USE_FIXTURE_DATA:
-        path = FIXTURE_DIR / "sample_units.json"
-        with open(path, encoding="utf-8") as f:
-            units = json.load(f)
-        lines = []
-        for u in units:
-            lines.append(f"- {u['unit']}：{u['responsibility']}")
-        return "\n".join(lines)
-
-    ss = _get_spreadsheet()
-    ws = ss.worksheet(SHEET_UNITS_WORKSHEET)
-    records = ws.get_all_records()
-    lines = []
-    for r in records:
-        lines.append(f"- {r.get('unit', '')}：{r.get('responsibility', '')}")
-    return "\n".join(lines)
-
-
-def load_rules_context() -> str:
-    if USE_FIXTURE_DATA:
-        path = FIXTURE_DIR / "sample_rules.md"
-        return path.read_text(encoding="utf-8")
-
-    ss = _get_spreadsheet()
-    ws = ss.worksheet(SHEET_RULES_WORKSHEET)
-    records = ws.get_all_records()
-    lines = []
-    for r in records:
-        lines.append(f"- {r.get('rule', '')}")
+        name = r.get("資產名稱", "")
+        if not name:
+            continue
+        lines.append(
+            f"- {name}（{r.get('資產類別', '')}, {r.get('機密等級', '')}）"
+            f"— {r.get('資產描述', '')}；"
+            f"流程：{r.get('業務流程/營運系統', '')}；"
+            f"部門：{r.get('部門', '')}；"
+            f"User：{r.get('使用者(User)', '')}；"
+            f"Owner：{r.get('擁有人(Owner)', '')}"
+        )
     return "\n".join(lines)

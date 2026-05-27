@@ -17,14 +17,10 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
 
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "")
 GOOGLE_DRIVE_IOC_FOLDER_ID = os.environ.get("GOOGLE_DRIVE_IOC_FOLDER_ID", "")
+ASSETS_SHEET_ID = os.environ.get("ASSETS_SHEET_ID", "")
+ASSETS_WORKSHEET = os.environ.get("ASSETS_WORKSHEET", "工作表1")
 
-MATTERMOST_WEBHOOK = os.environ.get("MATTERMOST_WEBHOOK", "")
 MATTERMOST_OPS_WEBHOOK = os.environ.get("MATTERMOST_OPS_WEBHOOK", "")
-
-SHEET_INTEL_WORKSHEET = os.environ.get("SHEET_INTEL_WORKSHEET", "情資紀錄")
-SHEET_ASSETS_WORKSHEET = os.environ.get("SHEET_ASSETS_WORKSHEET", "資產清單")
-SHEET_UNITS_WORKSHEET = os.environ.get("SHEET_UNITS_WORKSHEET", "單位清單")
-SHEET_RULES_WORKSHEET = os.environ.get("SHEET_RULES_WORKSHEET", "風險規章")
 
 USE_FIXTURE_DATA = os.environ.get("USE_FIXTURE_DATA", "true").lower() == "true"
 FIXTURE_DIR = Path(__file__).parent.parent / "tests" / "fixtures"
