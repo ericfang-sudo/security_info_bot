@@ -184,5 +184,19 @@ def _push() -> None:
     wt = _WORKTREE_DIR
     if not wt.exists():
         return
+    # Rebase on remote before pushing to handle concurrent CI runs.
+    # fetch returns non-zero when remote branch doesn't exist yet (first push) — skip rebase then.
+    fetch = subprocess.run(
+        ["git", "fetch", "origin", GIT_ARCHIVE_BRANCH],
+        cwd=wt,
+        capture_output=True,
+    )
+    if fetch.returncode == 0:
+        subprocess.run(
+            ["git", "rebase", f"origin/{GIT_ARCHIVE_BRANCH}"],
+            cwd=wt,
+            check=True,
+            capture_output=True,
+        )
     subprocess.run(["git", "push", "origin", GIT_ARCHIVE_BRANCH], cwd=wt, check=True)
     log.info("git_archive: pushed '%s' to origin", GIT_ARCHIVE_BRANCH)
