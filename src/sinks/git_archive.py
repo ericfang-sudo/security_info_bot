@@ -49,6 +49,16 @@ def _branch_exists(branch: str, cwd: Path) -> bool:
     return r.returncode == 0
 
 
+def _fetch_remote_branch(branch: str, cwd: Path) -> bool:
+    """Fetch a remote branch and return True if it now exists as origin/<branch>."""
+    r = subprocess.run(
+        ["git", "fetch", "origin", branch],
+        capture_output=True,
+        cwd=cwd,
+    )
+    return r.returncode == 0
+
+
 def _ensure_worktree() -> Path:
     repo = _repo_root()
     wt = _WORKTREE_DIR
@@ -60,27 +70,40 @@ def _ensure_worktree() -> Path:
         shutil.rmtree(wt)
 
     if not _branch_exists(GIT_ARCHIVE_BRANCH, repo):
-        empty_tree = (
+        # In CI the repo is a fresh clone and only 'main' is fetched, so the
+        # local archive branch never exists even when remote already does.
+        # Fetch from remote first; only fabricate an orphan root when the
+        # remote also has no such branch (true first-ever run).
+        if _fetch_remote_branch(GIT_ARCHIVE_BRANCH, repo):
             subprocess.run(
-                ["git", "hash-object", "-t", "tree", "--stdin"],
-                input=b"",
+                ["git", "branch", GIT_ARCHIVE_BRANCH, f"origin/{GIT_ARCHIVE_BRANCH}"],
+                cwd=repo,
+                check=True,
+            )
+            log.info("git_archive: created branch '%s' from remote", GIT_ARCHIVE_BRANCH)
+        else:
+            empty_tree = (
+                subprocess.run(
+                    ["git", "hash-object", "-t", "tree", "--stdin"],
+                    input=b"",
+                    capture_output=True,
+                    check=True,
+                    cwd=repo,
+                )
+                .stdout.decode()
+                .strip()
+            )
+            msg = f"init: {GIT_ARCHIVE_BRANCH} archive branch"
+            commit = subprocess.run(
+                ["git", "commit-tree", empty_tree, "-m", msg],
                 capture_output=True,
+                text=True,
                 check=True,
                 cwd=repo,
-            )
-            .stdout.decode()
-            .strip()
-        )
-        commit = subprocess.run(
-            ["git", "commit-tree", empty_tree, "-m", f"init: {GIT_ARCHIVE_BRANCH} archive branch"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=repo,
-            env=_GIT_BOT_ENV,
-        ).stdout.strip()
-        subprocess.run(["git", "branch", GIT_ARCHIVE_BRANCH, commit], cwd=repo, check=True)
-        log.info("git_archive: created branch '%s'", GIT_ARCHIVE_BRANCH)
+                env=_GIT_BOT_ENV,
+            ).stdout.strip()
+            subprocess.run(["git", "branch", GIT_ARCHIVE_BRANCH, commit], cwd=repo, check=True)
+            log.info("git_archive: created branch '%s'", GIT_ARCHIVE_BRANCH)
 
     subprocess.run(
         ["git", "worktree", "add", str(wt), GIT_ARCHIVE_BRANCH],
