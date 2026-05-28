@@ -1,0 +1,103 @@
+{
+  "source": "cisa_kev",
+  "analyzed_at": "2026-05-28T03:52:28.031380",
+  "count": 3,
+  "items": [
+    {
+      "intel": {
+        "intel_id": "CVE-2026-48027",
+        "source": "CISA_KEV",
+        "publish_date": "2026-05-27",
+        "title": "[CISA KEV] Nx Nx Console - Nx Console Embedded Malicious Code Vulnerability",
+        "intel_type": "101-漏洞訊息",
+        "cve_ids": [
+          "CVE-2026-48027"
+        ],
+        "raw_content": "CVE: CVE-2026-48027\n廠商: Nx\n產品: Nx Console\n漏洞名稱: Nx Console Embedded Malicious Code Vulnerability\n說明: Nx Console contains an embedded malicious code vulnerability that allowed a malicious version of Nx Console to be published. The compromised extension fetched an obfuscated payload that could harvested credentials from multiple sources on disk and in memory.\nCISA 要求措施: Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.\n修補截止日: 2026-06-10\n已知勒索軟體利用: Unknown\n",
+        "reference_urls": [
+          "This vulnerability could affect an open-source component, third-party library, protocol, or proprietary implementation that could be used by different products. For more information, please see: https://github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w ; https://nvd.nist.gov/vuln/detail/CVE-2026-48027",
+          "https://nvd.nist.gov/vuln/detail/CVE-2026-48027"
+        ],
+        "attachment_urls": [],
+        "ioc_ips": [],
+        "ioc_hashes": [],
+        "ioc_domains": [],
+        "impact_level": ""
+      },
+      "analysis": {
+        "risk_level": "High",
+        "summary": "CISA KEV 公布 Nx Console 開發工具遭植入惡意程式碼漏洞（CVE-2026-48027），受污染的套件版本會下載惡意載荷並竊取主機磁碟與記憶體中的敏感憑證，對開發人員工作站構成嚴重威脅。",
+        "recommendation": "1. 盤點並檢查開發人員工作站（如 VS Code 等 IDE 環境）是否安裝了 Nx Console 擴充套件。\n2. 若發現受影響版本，應立即依照官方安全公告（GHSA-c9j4-9m59-847w）進行移除或更新至安全版本。\n3. 針對曾安裝受影響版本之主機，建議進行全面掃毒，並強制重設該主機曾存取過的所有憑證與金鑰（如 Git、AWS、資料庫密碼等）。",
+        "company_relevance": "M",
+        "affected_assets": [
+          "資訊設備-桌上型電腦/筆記型電腦"
+        ],
+        "responsible_unit": "RR40"
+      }
+    },
+    {
+      "intel": {
+        "intel_id": "CVE-2026-45321",
+        "source": "CISA_KEV",
+        "publish_date": "2026-05-27",
+        "title": "[CISA KEV] TanStack TanStack - TanStack Unspecified Vulnerability",
+        "intel_type": "101-漏洞訊息",
+        "cve_ids": [
+          "CVE-2026-45321"
+        ],
+        "raw_content": "CVE: CVE-2026-45321\n廠商: TanStack\n產品: TanStack\n漏洞名稱: TanStack Unspecified Vulnerability\n說明: TanStack contains an unspecified vulnerability that allowed malicious versions of the product to be published to the npm registry to publish credential-stealing malware under a trusted identity.\nCISA 要求措施: Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.\n修補截止日: 2026-06-10\n已知勒索軟體利用: Unknown\n",
+        "reference_urls": [
+          "This vulnerability could affect an open-source component, third-party library, protocol, or proprietary implementation that could be used by different products. For more information, please see: https://github.com/TanStack/router/security/advisories/GHSA-g7cv-rxg3-hmpx ; https://nvd.nist.gov/vuln/detail/CVE-2026-45321",
+          "https://nvd.nist.gov/vuln/detail/CVE-2026-45321"
+        ],
+        "attachment_urls": [],
+        "ioc_ips": [],
+        "ioc_hashes": [],
+        "ioc_domains": [],
+        "impact_level": ""
+      },
+      "analysis": {
+        "risk_level": "High",
+        "summary": "CISA KEV 公布 TanStack 存在未指明的供應鏈安全漏洞（CVE-2026-45321），攻擊者可在 npm 倉庫中以受信任身份發布惡意版本套件，藉此散播用以竊取憑證的惡意軟體。此漏洞對使用該開源套件的前端開發專案具有高度威脅。",
+        "recommendation": "1. 研發部門（RR70）應立即清查所有前端開發專案，確認是否使用 TanStack 相關套件（如 TanStack Router、TanStack Query 等）。\n2. 檢查專案的 package-lock.json 或 yarn.lock，確保未引入受污染的惡意版本。\n3. 參考官方安全公告（GHSA-g7cv-rxg3-hmpx）進行版本比對，並將套件更新至官方安全版本。\n4. 監控開發環境與 CI/CD 管道，防範憑證外洩。",
+        "company_relevance": "M",
+        "affected_assets": [
+          "Lens Pro"
+        ],
+        "responsible_unit": "RR70"
+      }
+    },
+    {
+      "intel": {
+        "intel_id": "CVE-2026-8398",
+        "source": "CISA_KEV",
+        "publish_date": "2026-05-27",
+        "title": "[CISA KEV] Daemon Daemon Tools Lite - Daemon Tools Lite Embedded Malicious Code Vulnerability",
+        "intel_type": "101-漏洞訊息",
+        "cve_ids": [
+          "CVE-2026-8398"
+        ],
+        "raw_content": "CVE: CVE-2026-8398\n廠商: Daemon\n產品: Daemon Tools Lite\n漏洞名稱: Daemon Tools Lite Embedded Malicious Code Vulnerability\n說明: Daemon Tools contains an unspecified vulnerability that has a high impact on confidentiality, integrity, and availability.\nCISA 要求措施: Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.\n修補截止日: 2026-05-30\n已知勒索軟體利用: Unknown\n",
+        "reference_urls": [
+          "https://blog.daemon-tools.cc/post/security-incident ; https://nvd.nist.gov/vuln/detail/CVE-2026-8398",
+          "https://nvd.nist.gov/vuln/detail/CVE-2026-8398"
+        ],
+        "attachment_urls": [],
+        "ioc_ips": [],
+        "ioc_hashes": [],
+        "ioc_domains": [],
+        "impact_level": ""
+      },
+      "analysis": {
+        "risk_level": "High",
+        "summary": "CISA KEV 公布 Daemon Tools Lite 存在內嵌惡意程式碼漏洞（CVE-2026-8398），該漏洞已被用於活躍攻擊，嚴重威脅系統的機密性、完整性與可用性。由於公司存在大量同仁個人工作電腦，可能存在員工自行安裝此軟體之風險。",
+        "recommendation": "1. 建議資訊部門（RR40）全面清查「資訊設備-桌上型電腦/筆記型電腦」是否安裝 Daemon Tools Lite。\n2. 若發現安裝，應立即予以移除，或依據廠商官方安全指引進行修補。\n3. 建議透過端點管理策略限制員工自行安裝未經授權之虛擬光碟軟體。",
+        "company_relevance": "M",
+        "affected_assets": [
+          "資訊設備-桌上型電腦/筆記型電腦"
+        ],
+        "responsible_unit": "RR40"
+      }
+    }
+  ]
+}
