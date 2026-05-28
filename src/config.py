@@ -12,7 +12,7 @@ TWCERT_ACCOUNT = os.environ.get("TWCERT_ACCOUNT", "")
 TWCERT_PASSWORD = os.environ.get("TWCERT_PASSWORD", "")
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
 
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "")
 ASSETS_SHEET_ID = os.environ.get("ASSETS_SHEET_ID", "")
