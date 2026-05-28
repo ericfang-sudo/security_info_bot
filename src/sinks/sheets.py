@@ -205,6 +205,28 @@ def _format_worksheet(ws: gspread.Worksheet) -> None:
     ws.spreadsheet.batch_update({"requests": requests})
 
 
+def _sort_worksheets_newest_first(ss: gspread.Spreadsheet) -> None:
+    """Reorder YYYY-MM tabs descending; non-date tabs stay at the end."""
+    sheets = ss.worksheets()
+    date_tabs = sorted(
+        [s for s in sheets if len(s.title) == 7 and s.title[4] == "-"],
+        key=lambda s: s.title,
+        reverse=True,
+    )
+    other_tabs = [s for s in sheets if s not in date_tabs]
+    ordered = date_tabs + other_tabs
+    requests = [
+        {
+            "updateSheetProperties": {
+                "properties": {"sheetId": s.id, "index": i},
+                "fields": "index",
+            }
+        }
+        for i, s in enumerate(ordered)
+    ]
+    ss.batch_update({"requests": requests})
+
+
 def _get_or_create_date_worksheet(date_str: str) -> gspread.Worksheet:
     if date_str in _ws_cache:
         return _ws_cache[date_str]
@@ -215,6 +237,7 @@ def _get_or_create_date_worksheet(date_str: str) -> gspread.Worksheet:
         ws = ss.add_worksheet(title=date_str, rows=1000, cols=21)
         ws.append_row(INTEL_HEADERS, value_input_option="USER_ENTERED")
         _format_worksheet(ws)
+        _sort_worksheets_newest_first(ss)
         log.info("Created new worksheet: %s", date_str)
     _ws_cache[date_str] = ws
     return ws
