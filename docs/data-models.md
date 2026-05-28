@@ -54,20 +54,20 @@ Defined in `src/analyzer/gemini.py`. Gemini is constrained to return only these 
 
 ## SheetRow (Google Sheet — 21 columns A–U)
 
-Built by `SheetRow.from_intel_and_analysis(intel, analysis, cve_id, intel_id_suffix="", ioc_url="")`.
+Built by `SheetRow.from_intel_and_analysis(intel, analysis, ioc_url="")`.
 
-- `intel_id_suffix`: when an item has multiple CVEs, each row gets a suffix (`-1`, `-2`, …).
+- One row per `IntelItem`. Multiple CVE IDs are joined with `\n` in column G and rendered as separate lines in the cell (the worksheet's `wrapStrategy: WRAP` is set by `_format_worksheet`).
 - `ioc_url`: if non-empty, appended to the `recommendation` field as `\n\nIoC 清單：{url}`.
 
 | Col | Field | Source | Notes |
 |:---:|:--|:--|:--|
 | A | `record_date` | auto | `YYYY-MM-DD` (date written, not published) |
-| B | `intel_id` | auto | May include `-N` suffix for multi-CVE |
+| B | `intel_id` | auto | Matches `IntelItem.intel_id` exactly |
 | C | `source` | auto | "TWCERT" or "CISA_KEV" |
 | D | `publish_date` | auto | From `IntelItem.publish_date` |
 | E | `title` | auto | |
 | F | `intel_type` | auto | |
-| G | `cve_id` | auto | One CVE per row |
+| G | `cve_id` | auto | Newline-separated; multiple CVEs appear as separate lines in the cell |
 | H | `recommendation` | AI | May include IoC URL appended at the end |
 | I | `risk_level` | AI | Critical / High / Medium / Low / 無 |
 | J | `summary` | AI | |

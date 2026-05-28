@@ -20,7 +20,7 @@ def test_sheet_row_from_intel_single_cve():
         responsible_unit="系統組",
     )
 
-    row = SheetRow.from_intel_and_analysis(intel, analysis, "CVE-2024-12345")
+    row = SheetRow.from_intel_and_analysis(intel, analysis)
 
     assert row.intel_id == "TWISAC-202404-0001"
     assert row.cve_id == "CVE-2024-12345"
@@ -32,7 +32,7 @@ def test_sheet_row_from_intel_single_cve():
     assert len(row_list) == 21  # A–U
 
 
-def test_sheet_row_multi_cve_suffix():
+def test_sheet_row_multi_cve_merged():
     intel = IntelItem(
         intel_id="TWISAC-202404-0002",
         source="TWCERT",
@@ -48,13 +48,10 @@ def test_sheet_row_multi_cve_suffix():
         company_relevance="M",
     )
 
-    row1 = SheetRow.from_intel_and_analysis(intel, analysis, "CVE-2024-1111", intel_id_suffix="1")
-    row2 = SheetRow.from_intel_and_analysis(intel, analysis, "CVE-2024-2222", intel_id_suffix="2")
+    row = SheetRow.from_intel_and_analysis(intel, analysis)
 
-    assert row1.intel_id == "TWISAC-202404-0002-1"
-    assert row2.intel_id == "TWISAC-202404-0002-2"
-    assert row1.cve_id == "CVE-2024-1111"
-    assert row2.cve_id == "CVE-2024-2222"
+    assert row.intel_id == "TWISAC-202404-0002"
+    assert row.cve_id == "CVE-2024-1111\nCVE-2024-2222"
 
 
 def test_sheet_row_ioc():
@@ -72,7 +69,7 @@ def test_sheet_row_ioc():
         company_relevance="H",
     )
 
-    row = SheetRow.from_intel_and_analysis(intel, analysis, "")
+    row = SheetRow.from_intel_and_analysis(intel, analysis)
 
     assert row.recommendation == "匯入防火牆封鎖"
     assert row.intel_id == "TWISAC-202404-0003"

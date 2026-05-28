@@ -198,7 +198,7 @@ uv run pytest tests/ -v
 | D | 情資發布日期 | 自動 |
 | E | 情資主旨 | 自動 |
 | F | 情資類型 | 自動 |
-| G | CVE ID | 自動 |
+| G | CVE ID | 自動（多個 CVE 以換行分隔，顯示於同一儲存格） |
 | H | 建議措施 | AI |
 | I | AI 風險等級 | AI |
 | J | AI 分析摘要 | AI |

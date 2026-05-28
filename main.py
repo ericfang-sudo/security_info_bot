@@ -156,17 +156,12 @@ def stage_write_sheet(
                 )
                 ioc_url = ioc_file_url(ioc_path.name, adir) or ""
 
-        cve_list = intel.cve_ids if intel.cve_ids else [""]
-        for idx, cve_id in enumerate(cve_list):
-            suffix = str(idx + 1) if len(cve_list) > 1 else ""
-            row = SheetRow.from_intel_and_analysis(
-                intel=intel,
-                analysis=analysis,
-                cve_id=cve_id,
-                intel_id_suffix=suffix,
-                ioc_url=ioc_url,
-            )
-            all_rows.append(row)
+        row = SheetRow.from_intel_and_analysis(
+            intel=intel,
+            analysis=analysis,
+            ioc_url=ioc_url,
+        )
+        all_rows.append(row)
 
     if dry_run:
         log.info("[DRY RUN] Would write %d rows to Sheet", len(all_rows))

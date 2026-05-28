@@ -48,12 +48,12 @@ class AnalysisResult:
 @dataclass
 class SheetRow:
     record_date: str  # A
-    intel_id: str  # B (with CVE suffix for multi-CVE)
+    intel_id: str  # B
     source: str  # C
     publish_date: str  # D
     title: str  # E
     intel_type: str  # F
-    cve_id: str  # G (single CVE per row)
+    cve_id: str  # G (newline-separated when multiple CVEs)
     recommendation: str  # H
     risk_level: str  # I
     summary: str  # J
@@ -98,14 +98,9 @@ class SheetRow:
     def from_intel_and_analysis(
         intel: IntelItem,
         analysis: AnalysisResult,
-        cve_id: str,
-        intel_id_suffix: str = "",
         ioc_url: str = "",
     ) -> SheetRow:
         now = datetime.now().strftime("%Y-%m-%d")
-        row_intel_id = intel.intel_id
-        if intel_id_suffix:
-            row_intel_id = f"{intel.intel_id}-{intel_id_suffix}"
 
         recommendation = analysis.recommendation
         if ioc_url:
@@ -113,12 +108,12 @@ class SheetRow:
 
         return SheetRow(
             record_date=now,
-            intel_id=row_intel_id,
+            intel_id=intel.intel_id,
             source=intel.source,
             publish_date=intel.publish_date,
             title=intel.title,
             intel_type=intel.intel_type,
-            cve_id=cve_id,
+            cve_id="\n".join(intel.cve_ids),
             recommendation=recommendation,
             risk_level=analysis.risk_level,
             summary=analysis.summary,

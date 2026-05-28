@@ -95,9 +95,9 @@ Parses xlsx attachments embedded in TWCERT detail responses (`infoFile`) as base
 
 ## Cross-cutting rules
 
-### Multi-CVE fan-out
+### Multi-CVE handling
 
-If an `IntelItem` has multiple `cve_ids`, `main.py:stage_write_sheet` creates one `SheetRow` per CVE. Each row gets a numeric suffix on `intel_id` (e.g., `TWISAC-0028-1`, `TWISAC-0028-2`). Single-CVE items have no suffix.
+Gemini analysis is performed **once per `IntelItem`**, regardless of how many CVEs it contains. At Stage 3, `main.py:stage_write_sheet` produces **one `SheetRow` per item**. Column G (`cve_id`) contains all CVE IDs joined by newline characters (`\n`), rendered as multiple lines in a single cell thanks to the worksheet's `wrapStrategy: WRAP` setting applied by `_format_worksheet` in `src/sinks/sheets.py`.
 
 ### Monthly dedup scope
 
