@@ -14,3 +14,5 @@ ioc_*.txt
 .playwright-mcp
 .claude/settings.local.json
 secrets/
+!CLAUDE.md
+!GEMINI.md
