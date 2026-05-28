@@ -92,7 +92,7 @@ _COL_WIDTHS = [
     280,  # H 建議措施
     80,  # I 風險等級
     280,  # J 摘要
-    80,  # K 公司相關性
+    100,  # K 公司相關性
     180,  # L 受影響資產
     80,  # M 負責單位
     80,  # N 狀態
@@ -101,7 +101,7 @@ _COL_WIDTHS = [
     100,  # Q 完成日期
     80,  # R 處理人員
     120,  # S 通知時間
-    80,  # T TWCERT 影響等級
+    100,  # T TWCERT 影響等級
     180,  # U 參考網址
 ]
 
@@ -142,8 +142,11 @@ def _format_worksheet(ws: gspread.Worksheet) -> None:
         [
             {
                 "updateSheetProperties": {
-                    "properties": {"sheetId": sid, "gridProperties": {"frozenRowCount": 1}},
-                    "fields": "gridProperties.frozenRowCount",
+                    "properties": {
+                        "sheetId": sid,
+                        "gridProperties": {"frozenRowCount": 1, "frozenColumnCount": 4},
+                    },
+                    "fields": "gridProperties(frozenRowCount,frozenColumnCount)",
                 }
             },
             {
