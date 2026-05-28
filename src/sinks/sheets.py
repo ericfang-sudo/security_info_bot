@@ -106,66 +106,102 @@ _COL_WIDTHS = [
 ]
 
 
+# (col_index 0-based, values) for dropdown validation on data rows (startRowIndex=1)
+_DROPDOWN_COLS: list[tuple[int, list[str]]] = [
+    (8, ["Critical", "High", "Medium", "Low", "無"]),  # I 風險等級
+    (10, ["H", "M", "L", "無"]),  # K 公司相關性
+    (13, ["待處理", "處理中", "已完成", "不適用"]),  # N 狀態
+    (17, ["無"]),  # R 處理人員
+]
+
+
+def _dropdown_request(sid: int, col: int, values: list[str]) -> dict:
+    return {
+        "setDataValidation": {
+            "range": {
+                "sheetId": sid,
+                "startRowIndex": 1,
+                "startColumnIndex": col,
+                "endColumnIndex": col + 1,
+            },
+            "rule": {
+                "condition": {
+                    "type": "ONE_OF_LIST",
+                    "values": [{"userEnteredValue": v} for v in values],
+                },
+                "strict": False,
+                "showCustomUi": True,
+            },
+        }
+    }
+
+
 def _format_worksheet(ws: gspread.Worksheet) -> None:
     sid = ws._properties["sheetId"]
-    requests = [
-        {
-            "updateSheetProperties": {
-                "properties": {"sheetId": sid, "gridProperties": {"frozenRowCount": 1}},
-                "fields": "gridProperties.frozenRowCount",
+    requests = (
+        [
+            {
+                "updateSheetProperties": {
+                    "properties": {"sheetId": sid, "gridProperties": {"frozenRowCount": 1}},
+                    "fields": "gridProperties.frozenRowCount",
+                }
+            },
+            {
+                "setBasicFilter": {
+                    "filter": {"range": {"sheetId": sid, "startRowIndex": 0, "endColumnIndex": 21}}
+                }
+            },
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sid,
+                        "startRowIndex": 0,
+                        "endRowIndex": 1,
+                        "endColumnIndex": 21,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "textFormat": {"bold": True},
+                            "backgroundColor": {"red": 0.82, "green": 0.88, "blue": 0.95},
+                        }
+                    },
+                    "fields": "userEnteredFormat(textFormat,backgroundColor)",
+                }
+            },
+            {
+                "repeatCell": {
+                    "range": {"sheetId": sid, "endColumnIndex": 21},
+                    "cell": {
+                        "userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}
+                    },
+                    "fields": "userEnteredFormat(wrapStrategy,verticalAlignment)",
+                }
+            },
+            {
+                "repeatCell": {
+                    "range": {"sheetId": sid, "startColumnIndex": 20, "endColumnIndex": 21},
+                    "cell": {"userEnteredFormat": {"wrapStrategy": "CLIP"}},
+                    "fields": "userEnteredFormat.wrapStrategy",
+                }
+            },
+        ]
+        + [
+            {
+                "updateDimensionProperties": {
+                    "range": {
+                        "sheetId": sid,
+                        "dimension": "COLUMNS",
+                        "startIndex": i,
+                        "endIndex": i + 1,
+                    },
+                    "properties": {"pixelSize": w},
+                    "fields": "pixelSize",
+                }
             }
-        },
-        {
-            "setBasicFilter": {
-                "filter": {"range": {"sheetId": sid, "startRowIndex": 0, "endColumnIndex": 21}}
-            }
-        },
-        {
-            "repeatCell": {
-                "range": {
-                    "sheetId": sid,
-                    "startRowIndex": 0,
-                    "endRowIndex": 1,
-                    "endColumnIndex": 21,
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "textFormat": {"bold": True},
-                        "backgroundColor": {"red": 0.82, "green": 0.88, "blue": 0.95},
-                    }
-                },
-                "fields": "userEnteredFormat(textFormat,backgroundColor)",
-            }
-        },
-        {
-            "repeatCell": {
-                "range": {"sheetId": sid, "endColumnIndex": 21},
-                "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}},
-                "fields": "userEnteredFormat(wrapStrategy,verticalAlignment)",
-            }
-        },
-        {
-            "repeatCell": {
-                "range": {"sheetId": sid, "startColumnIndex": 20, "endColumnIndex": 21},
-                "cell": {"userEnteredFormat": {"wrapStrategy": "CLIP"}},
-                "fields": "userEnteredFormat.wrapStrategy",
-            }
-        },
-    ] + [
-        {
-            "updateDimensionProperties": {
-                "range": {
-                    "sheetId": sid,
-                    "dimension": "COLUMNS",
-                    "startIndex": i,
-                    "endIndex": i + 1,
-                },
-                "properties": {"pixelSize": w},
-                "fields": "pixelSize",
-            }
-        }
-        for i, w in enumerate(_COL_WIDTHS)
-    ]
+            for i, w in enumerate(_COL_WIDTHS)
+        ]
+        + [_dropdown_request(sid, col, values) for col, values in _DROPDOWN_COLS]
+    )
     ws.spreadsheet.batch_update({"requests": requests})
 
 
