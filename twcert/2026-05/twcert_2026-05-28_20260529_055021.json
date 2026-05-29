@@ -1,0 +1,27 @@
+{
+  "source": "twcert",
+  "fetched_at": "2026-05-29T05:50:21.033081",
+  "count": 1,
+  "items": [
+    {
+      "intel_id": "TWCERT-TWISAC-202605-0029",
+      "source": "TWCERT",
+      "publish_date": "2026-05-28 14:06",
+      "title": "[TLP CLEAR] Microsoft 旗下SharePoint Server 存在重大資安漏洞(CVE-2026-45659)",
+      "intel_type": "101-漏洞訊息",
+      "cve_ids": [
+        "CVE-2026-45659"
+      ],
+      "raw_content": "Microsoft SharePoint Server 是一款企業級協作平台，提供文件管理與團隊協作等功能，是企業資訊整合的核心平台。近期微軟發布重大資安公告(CVE-2026-45659，CVSS：8.8)，此漏洞為不受信任資料反序列化漏洞，允許經身分驗證的攻擊者可透過網路執行程式碼。\n\n影響平台：Microsoft SharePoint Enterprise Server 2016 16.0.5552.1002(不含)之前版本、\nMicrosoft SharePoint Server 2019 16.0.10417.20128(不含)之前版本、\nMicrosoft SharePoint Server Subscription Edition 16.0.19725.20280(不含)之前版本\n\n建議措施：根據官方網站釋出的解決方式進行修補：\nhttps://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-45659\n\n參考資訊：1. https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-45659\n2. https://nvd.nist.gov/vuln/detail/CVE-2026-45659\n\nTWCERT 影響等級：第 1 級",
+      "reference_urls": [
+        "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-45659",
+        "https://nvd.nist.gov/vuln/detail/CVE-2026-45659"
+      ],
+      "attachment_urls": [],
+      "ioc_ips": [],
+      "ioc_hashes": [],
+      "ioc_domains": [],
+      "impact_level": "1"
+    }
+  ]
+}
