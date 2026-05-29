@@ -100,7 +100,7 @@ class SheetRow:
         analysis: AnalysisResult,
         ioc_url: str = "",
     ) -> SheetRow:
-        now = datetime.now().strftime("%Y-%m-%d")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         recommendation = analysis.recommendation
         if ioc_url:
