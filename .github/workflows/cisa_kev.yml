@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       since:
-        description: 'Fetch start date (YYYY-MM-DD, UTC). Defaults to today.'
+        description: 'Fetch start date (YYYY-MM-DD, UTC). Defaults to yesterday.'
         required: false
         default: ''
 
@@ -34,5 +34,5 @@ jobs:
           USE_FIXTURE_DATA:      'false'
         run: |
           SINCE="${{ inputs.since || '' }}"
-          [ -z "$SINCE" ] && SINCE=$(date -u +%Y-%m-%d)
+          [ -z "$SINCE" ] && SINCE=$(date -u -d yesterday +%Y-%m-%d)
           uv run python main.py --source cisa_kev --since "$SINCE"
