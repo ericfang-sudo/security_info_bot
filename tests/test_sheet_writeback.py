@@ -75,6 +75,52 @@ def test_sheet_row_ioc():
     assert row.intel_id == "TWISAC-202404-0003"
 
 
+def test_status_not_applicable_when_no_relevance():
+    """company_relevance='無' → status 自動設為「不適用」"""
+    intel = IntelItem(
+        intel_id="TWISAC-202605-0029",
+        source="TWCERT",
+        publish_date="2026-05-28",
+        title="SharePoint Server 漏洞",
+        intel_type="101-漏洞訊息",
+    )
+    analysis = AnalysisResult(
+        risk_level="Low",
+        summary="公司未部署 SharePoint Server，受影響機率極低。",
+        recommendation="公司資產清冊未包含受影響資產，無需處置。",
+        company_relevance="無",
+        responsible_unit="",
+    )
+
+    row = SheetRow.from_intel_and_analysis(intel, analysis)
+
+    assert row.status == "不適用"
+    assert row.company_relevance == "無"
+    assert row.responsible_unit == ""
+
+
+def test_status_pending_when_relevant():
+    """company_relevance 非「無」→ status 維持「待處理」"""
+    intel = IntelItem(
+        intel_id="TWISAC-202605-0030",
+        source="TWCERT",
+        publish_date="2026-05-28",
+        title="Apache 漏洞",
+        intel_type="101-漏洞訊息",
+    )
+    analysis = AnalysisResult(
+        risk_level="High",
+        summary="公司有部署 Apache，需盡快修補。",
+        recommendation="升級至 2.4.59 以上。",
+        company_relevance="H",
+        responsible_unit="RR40",
+    )
+
+    row = SheetRow.from_intel_and_analysis(intel, analysis)
+
+    assert row.status == "待處理"
+
+
 def test_dedup_logic():
     existing = {"TWISAC-202404-0001", "CVE-2024-12345"}
     items = [

@@ -106,6 +106,8 @@ class SheetRow:
         if ioc_url:
             recommendation += f"\n\nIoC 清單：{ioc_url}"
 
+        status = "不適用" if analysis.company_relevance == "無" else "待處理"
+
         return SheetRow(
             record_date=now,
             intel_id=intel.intel_id,
@@ -120,6 +122,7 @@ class SheetRow:
             company_relevance=analysis.company_relevance,
             affected_assets=", ".join(analysis.affected_assets),
             responsible_unit=analysis.responsible_unit,
+            status=status,
             reference_urls="\n".join(intel.reference_urls),
             impact_level=intel.impact_level,
         )
